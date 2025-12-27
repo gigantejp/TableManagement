@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+      - claude/resume-project-session-SUI8J
   workflow_dispatch:
 
 permissions:
