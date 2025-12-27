@@ -8,12 +8,15 @@ import {
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import * as supabaseService from './lib/supabaseService';
+import * as authService from './lib/authService';
+import RegisterPage from './components/RegisterPage';
 
 function App() {
   const navigate = useNavigate();
 
   // Estado global de la app
   const [currentUser, setCurrentUser] = useState(null);
+  const [authSession, setAuthSession] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Estado del negocio
@@ -57,71 +60,149 @@ function App() {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  // Cargar datos iniciales desde Supabase
+  // Verificar autenticación y cargar datos iniciales
   useEffect(() => {
-    const loadInitialData = async () => {
+    const initAuth = async () => {
       try {
         setLoading(true);
-        const [businessData, categoriesData, menuItemsData, tablesData, ordersData, waiterCallsData] = await Promise.all([
-          supabaseService.fetchBusiness(),
-          supabaseService.fetchCategories(),
-          supabaseService.fetchMenuItems(),
-          supabaseService.fetchTables(),
-          supabaseService.fetchOrders(),
-          supabaseService.fetchWaiterCalls()
-        ]);
 
-        setBusiness(businessData);
-        setCategories(categoriesData);
-        setMenuItems(menuItemsData.map(item => ({
-          ...item,
-          categoryId: item.category_id
-        })));
-        setTables(tablesData);
-        setOrders(ordersData);
-        setWaiterCalls(waiterCallsData);
+        // Verificar si hay sesión activa
+        const session = await authService.getSession();
+
+        if (session) {
+          setAuthSession(session);
+          setCurrentUser(session.user);
+
+          // Obtener negocio del usuario
+          const userBusiness = await authService.getUserBusiness(session.user.id);
+
+          if (userBusiness) {
+            await loadBusinessData(userBusiness.id);
+          }
+        } else {
+          // Si no hay usuario autenticado, cargar datos demo (vanshelatto)
+          try {
+            await loadBusinessData('vanshelatto');
+          } catch (error) {
+            console.log('No demo business found');
+          }
+        }
       } catch (error) {
-        console.error('Error loading data:', error);
-        addNotification('Error al cargar datos', 'error');
+        console.error('Error initializing auth:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    loadInitialData();
+    initAuth();
 
-    // Suscripciones en tiempo real
-    const ordersSubscription = supabaseService.subscribeToOrders('vanshelatto', async () => {
-      const ordersData = await supabaseService.fetchOrders();
-      setOrders(ordersData);
-    });
+    // Escuchar cambios de autenticación
+    const { data: authListener } = authService.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session);
 
-    const waiterCallsSubscription = supabaseService.subscribeToWaiterCalls('vanshelatto', async () => {
-      const callsData = await supabaseService.fetchWaiterCalls();
-      setWaiterCalls(callsData);
-    });
+      setAuthSession(session);
+      setCurrentUser(session?.user || null);
 
-    const tablesSubscription = supabaseService.subscribeToTables('vanshelatto', async () => {
-      const tablesData = await supabaseService.fetchTables();
-      setTables(tablesData);
+      if (session?.user) {
+        // Usuario autenticado - cargar su negocio
+        const userBusiness = await authService.getUserBusiness(session.user.id);
+        if (userBusiness) {
+          await loadBusinessData(userBusiness.id);
+        }
+      } else {
+        // Usuario no autenticado - limpiar datos
+        setBusiness(null);
+        setCategories([]);
+        setMenuItems([]);
+        setTables([]);
+        setOrders([]);
+        setWaiterCalls([]);
+      }
     });
 
     return () => {
-      ordersSubscription.unsubscribe();
-      waiterCallsSubscription.unsubscribe();
-      tablesSubscription.unsubscribe();
+      authListener?.subscription?.unsubscribe();
     };
   }, []);
 
-  // Funciones de login
-  const handleLogin = () => {
-    setCurrentUser({ id: 1, businessId: 'vanshelatto' });
-    navigate('/admin/brand');
+  // Función para cargar datos del negocio
+  const loadBusinessData = async (businessId) => {
+    try {
+      const [businessData, categoriesData, menuItemsData, tablesData, ordersData, waiterCallsData] = await Promise.all([
+        supabaseService.fetchBusiness(businessId),
+        supabaseService.fetchCategories(businessId),
+        supabaseService.fetchMenuItems(businessId),
+        supabaseService.fetchTables(businessId),
+        supabaseService.fetchOrders(businessId),
+        supabaseService.fetchWaiterCalls(businessId)
+      ]);
+
+      setBusiness(businessData);
+      setCategories(categoriesData);
+      setMenuItems(menuItemsData.map(item => ({
+        ...item,
+        categoryId: item.category_id
+      })));
+      setTables(tablesData);
+      setOrders(ordersData);
+      setWaiterCalls(waiterCallsData);
+
+      // Suscripciones en tiempo real
+      setupRealtimeSubscriptions(businessId);
+    } catch (error) {
+      console.error('Error loading business data:', error);
+      addNotification('Error al cargar datos del negocio', 'error');
+      throw error;
+    }
   };
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    navigate('/');
+  // Configurar suscripciones en tiempo real
+  const setupRealtimeSubscriptions = (businessId) => {
+    const ordersSubscription = supabaseService.subscribeToOrders(businessId, async () => {
+      const ordersData = await supabaseService.fetchOrders(businessId);
+      setOrders(ordersData);
+    });
+
+    const waiterCallsSubscription = supabaseService.subscribeToWaiterCalls(businessId, async () => {
+      const callsData = await supabaseService.fetchWaiterCalls(businessId);
+      setWaiterCalls(callsData);
+    });
+
+    const tablesSubscription = supabaseService.subscribeToTables(businessId, async () => {
+      const tablesData = await supabaseService.fetchTables(businessId);
+      setTables(tablesData);
+    });
+  };
+
+  // Funciones de autenticación
+  const handleLogin = async (email, password) => {
+    try {
+      const result = await authService.signIn({ email, password });
+      // Auth state change listener manejará la carga de datos
+      addNotification('Sesión iniciada correctamente', 'success');
+      navigate('/admin/brand');
+      return result;
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authService.signOut();
+      // Auth state change listener manejará la limpieza de datos
+      addNotification('Sesión cerrada', 'success');
+      navigate('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+      addNotification('Error al cerrar sesión', 'error');
+    }
+  };
+
+  const handleRegisterSuccess = (user, business) => {
+    // El listener de auth manejará la carga de datos
+    addNotification(`Bienvenido a ${business.name}!`, 'success');
   };
 
   // Funciones de gestión de marca
@@ -491,10 +572,13 @@ function App() {
             <h1 className="text-2xl font-bold text-gray-800">Table Management</h1>
           </div>
           <div className="flex items-center gap-3">
-            <button className="text-gray-600 hover:text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-100 transition flex items-center gap-2">
+            <Link
+              to="/register"
+              className="text-gray-600 hover:text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-100 transition flex items-center gap-2"
+            >
               <UserPlus size={20} />
               Registrarse
-            </button>
+            </Link>
             <Link
               to="/login"
               className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold transition flex items-center gap-2"
@@ -631,55 +715,115 @@ function App() {
   );
 
   // LOGIN PAGE
-  const LoginPage = () => (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
-        <div className="text-center mb-8">
-          <div className="bg-blue-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Store className="text-blue-600" size={40} />
-          </div>
-          <h2 className="text-3xl font-bold text-gray-800">Iniciar Sesión</h2>
-          <p className="text-gray-600 mt-2">Accede a tu panel de gestión</p>
-        </div>
+  const LoginPage = () => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
-            <input
-              type="email"
-              defaultValue="admin@vanshelatto.com"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="tu@email.com"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Contraseña</label>
-            <input
-              type="password"
-              defaultValue="••••••••"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="••••••••"
-            />
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      setError('');
+      setLoading(true);
+
+      try {
+        await handleLogin(email, password);
+      } catch (error) {
+        console.error('Login error:', error);
+        if (error.message.includes('Invalid login credentials')) {
+          setError('Email o contraseña incorrectos');
+        } else if (error.message.includes('Email not confirmed')) {
+          setError('Por favor confirma tu email antes de iniciar sesión');
+        } else {
+          setError('Error al iniciar sesión. Intenta nuevamente.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+          <div className="text-center mb-8">
+            <div className="bg-blue-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Store className="text-blue-600" size={40} />
+            </div>
+            <h2 className="text-3xl font-bold text-gray-800">Iniciar Sesión</h2>
+            <p className="text-gray-600 mt-2">Accede a tu panel de gestión</p>
           </div>
 
-          <button
-            onClick={handleLogin}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2"
-          >
-            <LogIn size={20} />
-            Ingresar a Vanshelatto
-          </button>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="tu@email.com"
+                required
+                disabled={loading}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Contraseña</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="••••••••"
+                required
+                disabled={loading}
+                minLength={6}
+              />
+            </div>
 
-          <Link
-            to="/"
-            className="block w-full text-center text-gray-600 hover:text-gray-800 py-2 rounded-lg font-medium transition"
-          >
-            Volver al inicio
-          </Link>
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  Ingresando...
+                </>
+              ) : (
+                <>
+                  <LogIn size={20} />
+                  Ingresar
+                </>
+              )}
+            </button>
+
+            <div className="text-center pt-4 border-t border-gray-200">
+              <p className="text-gray-600">
+                ¿No tienes una cuenta?{' '}
+                <Link to="/register" className="text-blue-600 hover:text-blue-700 font-semibold">
+                  Regístrate aquí
+                </Link>
+              </p>
+            </div>
+
+            <Link
+              to="/"
+              className="block w-full text-center text-gray-600 hover:text-gray-800 py-2 rounded-lg font-medium transition"
+            >
+              Volver al inicio
+            </Link>
+          </form>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // ADMIN PANEL - Continuará en el siguiente mensaje...
   const AdminPanel = ({ tab }) => {
@@ -2118,6 +2262,15 @@ function App() {
     );
   };
 
+  // Protected Route Component
+  const ProtectedRoute = ({ children }) => {
+    if (!currentUser) {
+      addNotification('Debes iniciar sesión para acceder', 'error');
+      return <Navigate to="/login" replace />;
+    }
+    return children;
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -2135,12 +2288,33 @@ function App() {
       <NotificationContainer />
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/register" element={<RegisterPage onRegisterSuccess={handleRegisterSuccess} />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/admin" element={<Navigate to="/admin/brand" replace />} />
-        <Route path="/admin/brand" element={<AdminPanel tab="brand" />} />
-        <Route path="/admin/menu" element={<AdminPanel tab="menu" />} />
-        <Route path="/admin/tables" element={<AdminPanel tab="tables" />} />
-        <Route path="/admin/orders" element={<AdminPanel tab="orders" />} />
+        <Route path="/admin" element={
+          <ProtectedRoute>
+            <Navigate to="/admin/brand" replace />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/brand" element={
+          <ProtectedRoute>
+            <AdminPanel tab="brand" />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/menu" element={
+          <ProtectedRoute>
+            <AdminPanel tab="menu" />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/tables" element={
+          <ProtectedRoute>
+            <AdminPanel tab="tables" />
+          </ProtectedRoute>
+        } />
+        <Route path="/admin/orders" element={
+          <ProtectedRoute>
+            <AdminPanel tab="orders" />
+          </ProtectedRoute>
+        } />
         <Route path="/table/:tableNumber" element={<ClientViewWrapper />} />
       </Routes>
       {showQRModal && business && <QRModal table={showQRModal} businessId={business.id} onClose={() => setShowQRModal(null)} />}
