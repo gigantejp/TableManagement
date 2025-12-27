@@ -8,6 +8,7 @@ const RegisterPage = ({ onRegisterSuccess }) => {
   const [businessTypes, setBusinessTypes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [cooldown, setCooldown] = useState(0);
   const [formData, setFormData] = useState({
     businessName: '',
     email: '',
@@ -19,6 +20,14 @@ const RegisterPage = ({ onRegisterSuccess }) => {
   useEffect(() => {
     loadBusinessTypes();
   }, []);
+
+  // Cooldown timer
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setTimeout(() => setCooldown(cooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [cooldown]);
 
   const loadBusinessTypes = async () => {
     try {
@@ -33,6 +42,12 @@ const RegisterPage = ({ onRegisterSuccess }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    // Check cooldown
+    if (cooldown > 0) {
+      setError(`Por favor espera ${cooldown} segundos antes de intentar nuevamente`);
+      return;
+    }
 
     // Validations
     if (!formData.businessName.trim()) {
@@ -82,15 +97,30 @@ const RegisterPage = ({ onRegisterSuccess }) => {
     } catch (error) {
       console.error('Registration error:', error);
 
-      if (error.message.includes('already registered')) {
-        setError('Este email ya está registrado');
+      // Set cooldown to prevent spam
+      setCooldown(60);
+
+      // Parse error message
+      let errorMessage = 'Error al crear la cuenta. Intenta nuevamente.';
+
+      if (error.message.includes('already registered') || error.message.includes('already been registered')) {
+        errorMessage = 'Este email ya está registrado';
       } else if (error.message.includes('Invalid email')) {
-        setError('El email no es válido');
+        errorMessage = 'El email no es válido';
       } else if (error.message.includes('Password')) {
-        setError('La contraseña no cumple con los requisitos');
-      } else {
-        setError(error.message || 'Error al crear la cuenta. Intenta nuevamente.');
+        errorMessage = 'La contraseña no cumple con los requisitos';
+      } else if (error.message.includes('security purposes') || error.message.includes('rate limit')) {
+        errorMessage = 'Demasiados intentos. Por favor espera un minuto e intenta nuevamente.';
+      } else if (error.message.includes('Email rate limit exceeded')) {
+        errorMessage = 'Demasiados intentos. Por favor espera unos minutos.';
+      } else if (error.message) {
+        // Only show the error message if it doesn't contain technical jargon
+        if (!error.message.includes('seconds')) {
+          errorMessage = error.message;
+        }
       }
+
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -237,13 +267,17 @@ const RegisterPage = ({ onRegisterSuccess }) => {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || cooldown > 0}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                   Creando cuenta...
+                </>
+              ) : cooldown > 0 ? (
+                <>
+                  Espera {cooldown}s
                 </>
               ) : (
                 <>
