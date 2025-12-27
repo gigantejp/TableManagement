@@ -1,16 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   QrCode, User, Bell, ChefHat, Plus, Trash2, Check, ShoppingCart, ArrowLeft,
   AlertCircle, CreditCard, Edit2, Save, X, Upload, LogIn, UserPlus, Store,
   Coffee, UtensilsCrossed, Clock, TrendingUp, Users, Zap, Menu as MenuIcon,
-  Image as ImageIcon, DollarSign, Maximize2
+  Image as ImageIcon, DollarSign, Maximize2, Download
 } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
 
 // Datos iniciales del comercio demo
 const INITIAL_BUSINESS = {
   id: 'vanshelatto',
   name: 'Vanshelatto',
   logo: '🍦',
+  logoUrl: null,
   tagline: 'Heladería artesanal y cafetería',
   description: 'Los mejores helados artesanales y café de especialidad'
 };
@@ -32,17 +34,17 @@ const INITIAL_MENU_ITEMS = [
 ];
 
 const INITIAL_TABLES = [
-  { id: 1, number: 1, status: 'Disponible' },
-  { id: 2, number: 2, status: 'Disponible' },
-  { id: 3, number: 3, status: 'Disponible' },
-  { id: 4, number: 4, status: 'Disponible' }
+  { id: 1, number: 1, name: 'Mesa 1', status: 'Disponible' },
+  { id: 2, number: 2, name: 'Mesa 2', status: 'Disponible' },
+  { id: 3, number: 3, name: 'Mesa 3', status: 'Disponible' },
+  { id: 4, number: 4, name: 'Mesa 4', status: 'Disponible' }
 ];
 
 function App() {
   // Estado global de la app
   const [currentView, setCurrentView] = useState('landing'); // landing, login, admin, client
   const [currentUser, setCurrentUser] = useState(null);
-  const [adminTab, setAdminTab] = useState('brand'); // brand, menu, tables
+  const [adminTab, setAdminTab] = useState('brand'); // brand, menu, tables, orders
 
   // Estado del negocio
   const [business, setBusiness] = useState(INITIAL_BUSINESS);
@@ -68,14 +70,21 @@ function App() {
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [showAddMenuItem, setShowAddMenuItem] = useState(false);
   const [showAddTable, setShowAddTable] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(null);
 
   // Sistema de notificaciones
-  const addNotification = (message, type = 'success') => {
+  const addNotification = (message, type = 'success', persistent = false) => {
     const id = Date.now();
-    setNotifications(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 4000);
+    setNotifications(prev => [...prev, { id, message, type, persistent }]);
+    if (!persistent) {
+      setTimeout(() => {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+      }, 4000);
+    }
+  };
+
+  const dismissNotification = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
   // Funciones de login
@@ -143,10 +152,11 @@ function App() {
   };
 
   // Funciones de gestión de mesas
-  const addTable = (number) => {
+  const addTable = (number, name) => {
     const newTable = {
       id: Date.now(),
       number: parseInt(number),
+      name: name || `Mesa ${number}`,
       status: 'Disponible'
     };
     setTables(prev => [...prev, newTable]);
@@ -154,8 +164,10 @@ function App() {
     addNotification('Mesa agregada correctamente');
   };
 
-  const updateTable = (id, number) => {
-    setTables(prev => prev.map(table => table.id === id ? { ...table, number: parseInt(number) } : table));
+  const updateTable = (id, number, name) => {
+    setTables(prev => prev.map(table =>
+      table.id === id ? { ...table, number: parseInt(number), name: name || `Mesa ${number}` } : table
+    ));
     setEditingTable(null);
     addNotification('Mesa actualizada correctamente');
   };
@@ -165,10 +177,8 @@ function App() {
     addNotification('Mesa eliminada correctamente');
   };
 
-  const printQR = (tableNumber) => {
-    const qrUrl = `${window.location.origin}/${business.id}/table/${tableNumber}`;
-    addNotification(`QR generado: ${qrUrl}`, 'info');
-    // Aquí se podría implementar la descarga real del QR
+  const printQR = (table) => {
+    setShowQRModal(table);
   };
 
   // Funciones del cliente (mantienen la lógica anterior)
@@ -201,15 +211,19 @@ function App() {
   const placeOrder = () => {
     if (cart.length === 0) return;
 
+    const table = tables.find(t => t.number === currentTable);
     const newOrder = {
       id: Date.now(),
       tableNumber: currentTable,
+      tableName: table?.name || `Mesa ${currentTable}`,
       items: cart.map(item => ({
         ...item,
         subtotal: item.price * item.quantity
       })),
       total: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0),
       status: 'Pendiente',
+      estimatedTime: null,
+      startTime: null,
       timestamp: new Date().toLocaleTimeString()
     };
 
@@ -219,6 +233,9 @@ function App() {
     ));
     setCart([]);
     setOrderConfirmed(true);
+
+    // Persistent notification for new order
+    addNotification(`Nuevo pedido de ${table?.name || `Mesa ${currentTable}`}`, 'warning', true);
 
     setTimeout(() => {
       setOrderConfirmed(false);
@@ -268,11 +285,35 @@ function App() {
     }
   };
 
-  const markOrderComplete = (orderId) => {
+  const setEstimatedTime = (orderId, minutes) => {
     setOrders(prev => prev.map(order =>
-      order.id === orderId ? { ...order, status: 'Completado' } : order
+      order.id === orderId ? { ...order, estimatedTime: parseInt(minutes) } : order
     ));
-    addNotification('Pedido marcado como completado', 'success');
+    addNotification('Tiempo estimado configurado', 'success');
+  };
+
+  const startPreparation = (orderId) => {
+    setOrders(prev => prev.map(order =>
+      order.id === orderId ? { ...order, status: 'En preparación', startTime: Date.now() } : order
+    ));
+
+    // Dismiss persistent notification when order starts preparation
+    const order = orders.find(o => o.id === orderId);
+    if (order) {
+      const notif = notifications.find(n => n.message.includes(order.tableName));
+      if (notif) {
+        dismissNotification(notif.id);
+      }
+    }
+
+    addNotification('Pedido en preparación', 'info');
+  };
+
+  const markAsDelivered = (orderId) => {
+    setOrders(prev => prev.map(order =>
+      order.id === orderId ? { ...order, status: 'Entregado' } : order
+    ));
+    addNotification('Pedido entregado', 'success');
   };
 
   const accessClientView = (tableNumber) => {
@@ -300,6 +341,14 @@ function App() {
           {notif.type === 'warning' && <Bell size={20} />}
           {notif.type === 'info' && <AlertCircle size={20} />}
           <span className="font-medium">{notif.message}</span>
+          {notif.persistent && (
+            <button
+              onClick={() => dismissNotification(notif.id)}
+              className="ml-2 hover:bg-white/20 p-1 rounded"
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
       ))}
     </div>
@@ -517,7 +566,11 @@ function App() {
         <header className="bg-white shadow-sm sticky top-0 z-40">
           <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="text-4xl">{business.logo}</div>
+              {business.logoUrl ? (
+                <img src={business.logoUrl} alt={business.name} className="w-16 h-16 rounded-full object-cover" />
+              ) : (
+                <div className="text-4xl">{business.logo}</div>
+              )}
               <div>
                 <h1 className="text-2xl font-bold text-gray-800">{business.name}</h1>
                 <p className="text-sm text-gray-600">{business.tagline}</p>
@@ -624,6 +677,21 @@ function App() {
                 >
                   Gestión de Mesas
                 </button>
+                <button
+                  onClick={() => setAdminTab('orders')}
+                  className={`py-4 px-4 font-semibold border-b-2 transition relative ${
+                    adminTab === 'orders'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Gestión de Pedidos
+                  {orders.filter(o => o.status === 'Pendiente').length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {orders.filter(o => o.status === 'Pendiente').length}
+                    </span>
+                  )}
+                </button>
               </div>
             </div>
 
@@ -631,6 +699,7 @@ function App() {
               {adminTab === 'brand' && <BrandManagement />}
               {adminTab === 'menu' && <MenuManagement />}
               {adminTab === 'tables' && <TablesManagement />}
+              {adminTab === 'orders' && <OrdersManagement />}
             </div>
           </div>
 
@@ -728,6 +797,18 @@ function App() {
   // BRAND MANAGEMENT COMPONENT
   const BrandManagement = () => {
     const [formData, setFormData] = useState(business);
+    const fileInputRef = useRef(null);
+
+    const handleLogoUpload = (e) => {
+      const file = e.target.files[0];
+      if (file && file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setFormData({...formData, logoUrl: event.target.result});
+        };
+        reader.readAsDataURL(file);
+      }
+    };
 
     return (
       <div className="max-w-2xl">
@@ -746,7 +827,47 @@ function App() {
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Logo (Emoji)</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Logo de la Marca</label>
+            <div className="flex items-center gap-4">
+              {formData.logoUrl ? (
+                <div className="relative">
+                  <img src={formData.logoUrl} alt="Logo" className="w-24 h-24 object-cover rounded-lg border-2 border-gray-300" />
+                  <button
+                    onClick={() => setFormData({...formData, logoUrl: null})}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-24 h-24 bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center text-4xl">
+                  {formData.logo}
+                </div>
+              )}
+              <div className="flex-1">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoUpload}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition"
+                >
+                  <Upload size={20} />
+                  Subir Imagen
+                </button>
+                <p className="text-xs text-gray-500 mt-2">
+                  Sube una imagen de tu logo. Se mostrará en el menú digital.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Logo Emoji (alternativo)</label>
             <input
               type="text"
               value={formData.logo}
@@ -755,7 +876,7 @@ function App() {
               placeholder="🍦"
               maxLength={2}
             />
-            <p className="text-xs text-gray-500 mt-1">Ingresa un emoji que represente tu negocio</p>
+            <p className="text-xs text-gray-500 mt-1">Se usará si no subes una imagen</p>
           </div>
 
           <div>
@@ -920,7 +1041,7 @@ function App() {
               businessId={business.id}
               onEdit={() => setEditingTable(table)}
               onDelete={() => deleteTable(table.id)}
-              onPrintQR={() => printQR(table.number)}
+              onPrintQR={() => printQR(table)}
               onAccess={() => accessClientView(table.number)}
             />
           ))}
@@ -939,6 +1060,147 @@ function App() {
             onUpdate={updateTable}
             onCancel={() => setEditingTable(null)}
           />
+        )}
+      </div>
+    );
+  };
+
+  // ORDERS MANAGEMENT COMPONENT
+  const OrdersManagement = () => {
+    const OrderCard = ({ order }) => {
+      const [estimatedMinutes, setEstimatedMinutes] = useState(order.estimatedTime || '');
+
+      return (
+        <div className="bg-white border-2 border-gray-200 rounded-xl p-6 mb-4">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-100 p-3 rounded-lg">
+                <User className="text-blue-600" size={24} />
+              </div>
+              <div>
+                <h4 className="text-xl font-bold text-gray-800">{order.tableName}</h4>
+                <p className="text-sm text-gray-500">{order.timestamp}</p>
+              </div>
+            </div>
+            <span className={`px-4 py-2 rounded-full font-semibold text-sm ${
+              order.status === 'Pendiente' ? 'bg-yellow-100 text-yellow-700' :
+              order.status === 'En preparación' ? 'bg-blue-100 text-blue-700' :
+              'bg-green-100 text-green-700'
+            }`}>
+              {order.status}
+            </span>
+          </div>
+
+          <div className="bg-gray-50 rounded-lg p-4 mb-4">
+            <h5 className="font-semibold text-gray-700 mb-2">Detalles del Pedido:</h5>
+            {order.items.map((item, idx) => (
+              <div key={idx} className="flex justify-between text-sm py-1">
+                <span>{item.quantity}x {item.name}</span>
+                <span className="font-semibold">${item.subtotal}</span>
+              </div>
+            ))}
+            <div className="border-t mt-2 pt-2 flex justify-between font-bold text-lg">
+              <span>Total:</span>
+              <span className="text-blue-600">${order.total}</span>
+            </div>
+          </div>
+
+          {order.status === 'Pendiente' && (
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={estimatedMinutes}
+                  onChange={(e) => setEstimatedMinutes(e.target.value)}
+                  placeholder="Tiempo estimado (minutos)"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={() => {
+                    if (estimatedMinutes) {
+                      setEstimatedTime(order.id, estimatedMinutes);
+                    }
+                  }}
+                  className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition"
+                >
+                  Establecer
+                </button>
+              </div>
+              <button
+                onClick={() => startPreparation(order.id)}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2"
+                disabled={!order.estimatedTime}
+              >
+                <ChefHat size={20} />
+                Comenzar Preparación
+              </button>
+            </div>
+          )}
+
+          {order.status === 'En preparación' && (
+            <button
+              onClick={() => markAsDelivered(order.id)}
+              className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2"
+            >
+              <Check size={20} />
+              Marcar como Entregado
+            </button>
+          )}
+
+          {order.status === 'Entregado' && (
+            <div className="text-center py-2 text-green-600 font-semibold">
+              ¡Pedido completado!
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const pendingOrders = orders.filter(o => o.status === 'Pendiente');
+    const inProgressOrders = orders.filter(o => o.status === 'En preparación');
+    const deliveredOrders = orders.filter(o => o.status === 'Entregado');
+
+    return (
+      <div>
+        <h3 className="text-xl font-bold text-gray-800 mb-6">Gestión de Pedidos</h3>
+
+        {orders.length === 0 ? (
+          <div className="bg-gray-50 rounded-xl p-12 text-center">
+            <ChefHat className="mx-auto text-gray-300 mb-4" size={64} />
+            <p className="text-gray-500 text-lg">No hay pedidos activos</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {pendingOrders.length > 0 && (
+              <div>
+                <h4 className="font-semibold text-yellow-700 mb-3 flex items-center gap-2">
+                  <Clock size={20} />
+                  Pendientes ({pendingOrders.length})
+                </h4>
+                {pendingOrders.map(order => <OrderCard key={order.id} order={order} />)}
+              </div>
+            )}
+
+            {inProgressOrders.length > 0 && (
+              <div>
+                <h4 className="font-semibold text-blue-700 mb-3 flex items-center gap-2">
+                  <ChefHat size={20} />
+                  En Preparación ({inProgressOrders.length})
+                </h4>
+                {inProgressOrders.map(order => <OrderCard key={order.id} order={order} />)}
+              </div>
+            )}
+
+            {deliveredOrders.length > 0 && (
+              <div>
+                <h4 className="font-semibold text-green-700 mb-3 flex items-center gap-2">
+                  <Check size={20} />
+                  Entregados ({deliveredOrders.length})
+                </h4>
+                {deliveredOrders.map(order => <OrderCard key={order.id} order={order} />)}
+              </div>
+            )}
+          </div>
         )}
       </div>
     );
@@ -986,7 +1248,8 @@ function App() {
     <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md transition">
       <div className="flex justify-between items-start mb-4">
         <div>
-          <h4 className="text-2xl font-bold text-gray-800">Mesa {table.number}</h4>
+          <h4 className="text-2xl font-bold text-gray-800">{table.name}</h4>
+          <p className="text-sm text-gray-500">Número: {table.number}</p>
           <span className={`inline-block mt-2 px-3 py-1 rounded-full text-sm font-semibold ${
             table.status === 'Ocupada' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
           }`}>
@@ -1023,6 +1286,61 @@ function App() {
       </div>
     </div>
   );
+
+  // QR MODAL COMPONENT
+  const QRModal = ({ table, businessId, onClose }) => {
+    const qrRef = useRef(null);
+
+    const downloadQR = () => {
+      const canvas = qrRef.current.querySelector('canvas');
+      if (canvas) {
+        const url = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `${table.name}-QR.png`;
+        link.href = url;
+        link.click();
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl p-8 max-w-md w-full">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-2xl font-bold text-gray-800">Código QR</h3>
+            <button
+              onClick={onClose}
+              className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-2 rounded-lg transition"
+            >
+              <X size={24} />
+            </button>
+          </div>
+
+          <div className="text-center">
+            <div ref={qrRef} className="bg-white p-6 rounded-xl inline-block">
+              <QRCodeCanvas
+                value={`${window.location.origin}/${businessId}/table/${table.number}`}
+                size={256}
+                level="H"
+                includeMargin={true}
+              />
+            </div>
+            <div className="mt-4 mb-6">
+              <p className="text-xl font-bold text-gray-800">{table.name}</p>
+              <p className="text-sm text-gray-500 mt-1">Escanea para ver el menú</p>
+            </div>
+
+            <button
+              onClick={downloadQR}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2"
+            >
+              <Download size={20} />
+              Descargar QR
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // FORM COMPONENTS
   const AddCategoryForm = ({ onAdd, onCancel }) => {
@@ -1259,6 +1577,7 @@ function App() {
 
   const AddTableForm = ({ onAdd, onCancel }) => {
     const [number, setNumber] = useState('');
+    const [name, setName] = useState('');
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
@@ -1269,13 +1588,26 @@ function App() {
               <input
                 type="number"
                 value={number}
-                onChange={(e) => setNumber(e.target.value)}
+                onChange={(e) => {
+                  setNumber(e.target.value);
+                  if (!name) setName(`Mesa ${e.target.value}`);
+                }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 placeholder="1"
               />
             </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Nombre de la Mesa</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Mesa 1"
+              />
+            </div>
             <div className="flex gap-2">
-              <button onClick={() => number && onAdd(number)} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition">
+              <button onClick={() => number && name && onAdd(number, name)} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition">
                 Agregar
               </button>
               <button onClick={onCancel} className="flex-1 text-gray-600 hover:bg-gray-200 px-4 py-2 rounded-lg transition">
@@ -1290,6 +1622,7 @@ function App() {
 
   const EditTableForm = ({ table, onUpdate, onCancel }) => {
     const [number, setNumber] = useState(table.number);
+    const [name, setName] = useState(table.name);
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
@@ -1304,8 +1637,17 @@ function App() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Nombre de la Mesa</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
             <div className="flex gap-2">
-              <button onClick={() => onUpdate(table.id, number)} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition">
+              <button onClick={() => onUpdate(table.id, number, name)} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition">
                 Guardar
               </button>
               <button onClick={onCancel} className="flex-1 text-gray-600 hover:bg-gray-200 px-4 py-2 rounded-lg transition">
@@ -1322,6 +1664,22 @@ function App() {
   const ClientView = () => {
     const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const tableOrders = orders.filter(o => o.tableNumber === currentTable);
+    const currentOrder = tableOrders.find(o => o.status === 'En preparación' || o.status === 'Entregado');
+
+    // Calculate time remaining for orders in preparation
+    const [timeLeft, setTimeLeft] = useState(0);
+
+    useEffect(() => {
+      if (currentOrder && currentOrder.status === 'En preparación' && currentOrder.estimatedTime && currentOrder.startTime) {
+        const interval = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - currentOrder.startTime) / 1000 / 60);
+          const remaining = currentOrder.estimatedTime - elapsed;
+          setTimeLeft(Math.max(0, remaining));
+        }, 1000);
+
+        return () => clearInterval(interval);
+      }
+    }, [currentOrder]);
 
     if (orderConfirmed) {
       return (
@@ -1414,7 +1772,11 @@ function App() {
               </button>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-2xl">{business.logo}</span>
+                  {business.logoUrl ? (
+                    <img src={business.logoUrl} alt={business.name} className="w-8 h-8 rounded-full object-cover" />
+                  ) : (
+                    <span className="text-2xl">{business.logo}</span>
+                  )}
                   <span className="font-bold">{business.name}</span>
                 </div>
                 <p className="text-sm text-blue-100">Mesa {currentTable}</p>
@@ -1422,6 +1784,32 @@ function App() {
             </div>
           </div>
         </div>
+
+        {/* Order Status Banner */}
+        {currentOrder && currentOrder.status === 'En preparación' && (
+          <div className="bg-blue-500 text-white p-4 shadow-md">
+            <div className="max-w-2xl mx-auto text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <ChefHat size={24} />
+                <p className="font-bold text-lg">Tu pedido está en preparación</p>
+              </div>
+              <div className="flex items-center justify-center gap-2">
+                <Clock size={20} />
+                <p className="text-xl font-bold">{timeLeft} minutos restantes</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {currentOrder && currentOrder.status === 'Entregado' && (
+          <div className="bg-green-500 text-white p-6 shadow-md">
+            <div className="max-w-2xl mx-auto text-center">
+              <div className="text-4xl mb-2">🎉</div>
+              <p className="font-bold text-2xl">¡Que lo disfrutes!</p>
+              <p className="text-sm mt-2">Tu pedido ha sido entregado</p>
+            </div>
+          </div>
+        )}
 
         <div className="bg-white shadow-sm sticky top-16 z-10">
           <div className="flex border-b border-gray-200">
@@ -1589,6 +1977,7 @@ function App() {
       {currentView === 'login' && <LoginPage />}
       {currentView === 'admin' && <AdminPanel />}
       {currentView === 'client' && <ClientView />}
+      {showQRModal && <QRModal table={showQRModal} businessId={business.id} onClose={() => setShowQRModal(null)} />}
     </>
   );
 }
