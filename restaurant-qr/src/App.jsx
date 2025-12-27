@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Routes, Route, Navigate, useNavigate, useParams, Link } from 'react-router-dom';
 import {
   QrCode, User, Bell, ChefHat, Plus, Trash2, Check, ShoppingCart, ArrowLeft,
   AlertCircle, CreditCard, Edit2, Save, X, Upload, LogIn, UserPlus, Store,
@@ -9,10 +10,10 @@ import { QRCodeCanvas } from 'qrcode.react';
 import * as supabaseService from './lib/supabaseService';
 
 function App() {
+  const navigate = useNavigate();
+
   // Estado global de la app
-  const [currentView, setCurrentView] = useState('landing'); // landing, login, admin, client
   const [currentUser, setCurrentUser] = useState(null);
-  const [adminTab, setAdminTab] = useState('brand'); // brand, menu, tables, orders
   const [loading, setLoading] = useState(true);
 
   // Estado del negocio
@@ -115,12 +116,12 @@ function App() {
   // Funciones de login
   const handleLogin = () => {
     setCurrentUser({ id: 1, businessId: 'vanshelatto' });
-    setCurrentView('admin');
+    navigate('/admin/brand');
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
-    setCurrentView('landing');
+    navigate('/');
   };
 
   // Funciones de gestión de marca
@@ -370,7 +371,7 @@ function App() {
 
     addNotification(`Pago procesado para Mesa ${currentTable}`, 'success');
     setShowAccount(false);
-    setCurrentView('landing');
+    navigate('/');
     setCurrentTable(null);
   };
 
@@ -443,7 +444,7 @@ function App() {
 
   const accessClientView = (tableNumber) => {
     setCurrentTable(tableNumber);
-    setCurrentView('client');
+    navigate(`/table/${tableNumber}`);
     setClientTab('menu');
     setCart([]);
     setShowAccount(false);
@@ -494,13 +495,13 @@ function App() {
               <UserPlus size={20} />
               Registrarse
             </button>
-            <button
-              onClick={() => setCurrentView('login')}
+            <Link
+              to="/login"
               className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-semibold transition flex items-center gap-2"
             >
               <LogIn size={20} />
               Ingresar
-            </button>
+            </Link>
           </div>
         </div>
       </header>
@@ -602,12 +603,12 @@ function App() {
           <h3 className="text-3xl font-bold text-gray-900 mb-6">
             ¿Listo para modernizar tu negocio?
           </h3>
-          <button
-            onClick={() => setCurrentView('login')}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transition transform hover:scale-105"
+          <Link
+            to="/login"
+            className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transition transform hover:scale-105"
           >
             Comenzar Ahora - Es Gratis
-          </button>
+          </Link>
         </div>
       </section>
 
@@ -669,21 +670,22 @@ function App() {
             Ingresar a Vanshelatto
           </button>
 
-          <button
-            onClick={() => setCurrentView('landing')}
-            className="w-full text-gray-600 hover:text-gray-800 py-2 rounded-lg font-medium transition"
+          <Link
+            to="/"
+            className="block w-full text-center text-gray-600 hover:text-gray-800 py-2 rounded-lg font-medium transition"
           >
             Volver al inicio
-          </button>
+          </Link>
         </div>
       </div>
     </div>
   );
 
   // ADMIN PANEL - Continuará en el siguiente mensaje...
-  const AdminPanel = () => {
+  const AdminPanel = ({ tab }) => {
     const occupiedTables = tables.filter(t => t.status === 'Ocupada').length;
     const availableTables = tables.filter(t => t.status === 'Disponible').length;
+    const adminTab = tab || 'brand';
 
     return (
       <div className="min-h-screen bg-gray-50">
@@ -772,8 +774,8 @@ function App() {
           <div className="bg-white rounded-xl shadow-md mb-6">
             <div className="border-b border-gray-200">
               <div className="flex gap-4 px-6">
-                <button
-                  onClick={() => setAdminTab('brand')}
+                <Link
+                  to="/admin/brand"
                   className={`py-4 px-4 font-semibold border-b-2 transition ${
                     adminTab === 'brand'
                       ? 'border-blue-500 text-blue-600'
@@ -781,9 +783,9 @@ function App() {
                   }`}
                 >
                   Gestión de Marca
-                </button>
-                <button
-                  onClick={() => setAdminTab('menu')}
+                </Link>
+                <Link
+                  to="/admin/menu"
                   className={`py-4 px-4 font-semibold border-b-2 transition ${
                     adminTab === 'menu'
                       ? 'border-blue-500 text-blue-600'
@@ -791,9 +793,9 @@ function App() {
                   }`}
                 >
                   Gestión del Menú
-                </button>
-                <button
-                  onClick={() => setAdminTab('tables')}
+                </Link>
+                <Link
+                  to="/admin/tables"
                   className={`py-4 px-4 font-semibold border-b-2 transition ${
                     adminTab === 'tables'
                       ? 'border-blue-500 text-blue-600'
@@ -801,9 +803,9 @@ function App() {
                   }`}
                 >
                   Gestión de Mesas
-                </button>
-                <button
-                  onClick={() => setAdminTab('orders')}
+                </Link>
+                <Link
+                  to="/admin/orders"
                   className={`py-4 px-4 font-semibold border-b-2 transition relative ${
                     adminTab === 'orders'
                       ? 'border-blue-500 text-blue-600'
@@ -816,7 +818,7 @@ function App() {
                       {orders.filter(o => o.status === 'Pendiente').length}
                     </span>
                   )}
-                </button>
+                </Link>
               </div>
             </div>
 
@@ -1792,6 +1794,20 @@ function App() {
     );
   };
 
+  // CLIENT VIEW WRAPPER - extrae tableNumber de URL params
+  const ClientViewWrapper = () => {
+    const { tableNumber } = useParams();
+
+    useEffect(() => {
+      setCurrentTable(parseInt(tableNumber));
+      setClientTab('menu');
+      setCart([]);
+      setShowAccount(false);
+    }, [tableNumber]);
+
+    return <ClientView />;
+  };
+
   // CLIENT VIEW - mantiene la funcionalidad anterior pero con datos dinámicos
   const ClientView = () => {
     const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -1896,12 +1912,12 @@ function App() {
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 shadow-lg sticky top-0 z-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => setCurrentView('landing')}
+              <Link
+                to="/"
                 className="p-2 hover:bg-white/20 rounded-lg transition"
               >
                 <ArrowLeft size={24} />
-              </button>
+              </Link>
               <div>
                 <div className="flex items-center gap-2">
                   {business.logoUrl ? (
@@ -2117,10 +2133,16 @@ function App() {
   return (
     <>
       <NotificationContainer />
-      {currentView === 'landing' && <LandingPage />}
-      {currentView === 'login' && <LoginPage />}
-      {currentView === 'admin' && <AdminPanel />}
-      {currentView === 'client' && <ClientView />}
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/admin" element={<Navigate to="/admin/brand" replace />} />
+        <Route path="/admin/brand" element={<AdminPanel tab="brand" />} />
+        <Route path="/admin/menu" element={<AdminPanel tab="menu" />} />
+        <Route path="/admin/tables" element={<AdminPanel tab="tables" />} />
+        <Route path="/admin/orders" element={<AdminPanel tab="orders" />} />
+        <Route path="/table/:tableNumber" element={<ClientViewWrapper />} />
+      </Routes>
       {showQRModal && business && <QRModal table={showQRModal} businessId={business.id} onClose={() => setShowQRModal(null)} />}
     </>
   );
