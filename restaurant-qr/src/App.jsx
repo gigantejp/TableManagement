@@ -6,51 +6,20 @@ import {
   Image as ImageIcon, DollarSign, Maximize2, Download
 } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
-
-// Datos iniciales del comercio demo
-const INITIAL_BUSINESS = {
-  id: 'vanshelatto',
-  name: 'Vanshelatto',
-  logo: '🍦',
-  logoUrl: null,
-  tagline: 'Heladería artesanal y cafetería',
-  description: 'Los mejores helados artesanales y café de especialidad'
-};
-
-const INITIAL_CATEGORIES = [
-  { id: 1, name: 'Helados' },
-  { id: 2, name: 'Cafetería' },
-  { id: 3, name: 'Postres' },
-  { id: 4, name: 'Bebidas' }
-];
-
-const INITIAL_MENU_ITEMS = [
-  { id: 1, categoryId: 1, name: 'Helado de Chocolate', price: 800, image: '🍫', size: 'Mediano', unit: 'gramos' },
-  { id: 2, categoryId: 1, name: 'Helado de Vainilla', price: 750, image: '🍦', size: 'Mediano', unit: 'gramos' },
-  { id: 3, categoryId: 2, name: 'Café Espresso', price: 350, image: '☕', size: 'Chico', unit: 'ml' },
-  { id: 4, categoryId: 2, name: 'Cappuccino', price: 450, image: '☕', size: 'Mediano', unit: 'ml' },
-  { id: 5, categoryId: 3, name: 'Brownie', price: 600, image: '🍰', size: 'Unidad', unit: 'unidad' },
-  { id: 6, categoryId: 4, name: 'Limonada', price: 300, image: '🍋', size: 'Grande', unit: 'ml' }
-];
-
-const INITIAL_TABLES = [
-  { id: 1, number: 1, name: 'Mesa 1', status: 'Disponible' },
-  { id: 2, number: 2, name: 'Mesa 2', status: 'Disponible' },
-  { id: 3, number: 3, name: 'Mesa 3', status: 'Disponible' },
-  { id: 4, number: 4, name: 'Mesa 4', status: 'Disponible' }
-];
+import * as supabaseService from './lib/supabaseService';
 
 function App() {
   // Estado global de la app
   const [currentView, setCurrentView] = useState('landing'); // landing, login, admin, client
   const [currentUser, setCurrentUser] = useState(null);
   const [adminTab, setAdminTab] = useState('brand'); // brand, menu, tables, orders
+  const [loading, setLoading] = useState(true);
 
   // Estado del negocio
-  const [business, setBusiness] = useState(INITIAL_BUSINESS);
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
-  const [menuItems, setMenuItems] = useState(INITIAL_MENU_ITEMS);
-  const [tables, setTables] = useState(INITIAL_TABLES);
+  const [business, setBusiness] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [menuItems, setMenuItems] = useState([]);
+  const [tables, setTables] = useState([]);
 
   // Estado del cliente
   const [currentTable, setCurrentTable] = useState(null);
@@ -87,6 +56,62 @@ function App() {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
+  // Cargar datos iniciales desde Supabase
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        setLoading(true);
+        const [businessData, categoriesData, menuItemsData, tablesData, ordersData, waiterCallsData] = await Promise.all([
+          supabaseService.fetchBusiness(),
+          supabaseService.fetchCategories(),
+          supabaseService.fetchMenuItems(),
+          supabaseService.fetchTables(),
+          supabaseService.fetchOrders(),
+          supabaseService.fetchWaiterCalls()
+        ]);
+
+        setBusiness(businessData);
+        setCategories(categoriesData);
+        setMenuItems(menuItemsData.map(item => ({
+          ...item,
+          categoryId: item.category_id
+        })));
+        setTables(tablesData);
+        setOrders(ordersData);
+        setWaiterCalls(waiterCallsData);
+      } catch (error) {
+        console.error('Error loading data:', error);
+        addNotification('Error al cargar datos', 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInitialData();
+
+    // Suscripciones en tiempo real
+    const ordersSubscription = supabaseService.subscribeToOrders('vanshelatto', async () => {
+      const ordersData = await supabaseService.fetchOrders();
+      setOrders(ordersData);
+    });
+
+    const waiterCallsSubscription = supabaseService.subscribeToWaiterCalls('vanshelatto', async () => {
+      const callsData = await supabaseService.fetchWaiterCalls();
+      setWaiterCalls(callsData);
+    });
+
+    const tablesSubscription = supabaseService.subscribeToTables('vanshelatto', async () => {
+      const tablesData = await supabaseService.fetchTables();
+      setTables(tablesData);
+    });
+
+    return () => {
+      ordersSubscription.unsubscribe();
+      waiterCallsSubscription.unsubscribe();
+      tablesSubscription.unsubscribe();
+    };
+  }, []);
+
   // Funciones de login
   const handleLogin = () => {
     setCurrentUser({ id: 1, businessId: 'vanshelatto' });
@@ -99,82 +124,146 @@ function App() {
   };
 
   // Funciones de gestión de marca
-  const saveBrandChanges = (newBrand) => {
-    setBusiness(newBrand);
-    setEditingBrand(false);
-    addNotification('Información de marca actualizada correctamente');
+  const saveBrandChanges = async (newBrand) => {
+    try {
+      const updated = await supabaseService.updateBusiness('vanshelatto', {
+        name: newBrand.name,
+        logo: newBrand.logo,
+        logo_url: newBrand.logoUrl,
+        tagline: newBrand.tagline,
+        description: newBrand.description
+      });
+      setBusiness(updated);
+      setEditingBrand(false);
+      addNotification('Información de marca actualizada correctamente');
+    } catch (error) {
+      console.error('Error updating business:', error);
+      addNotification('Error al actualizar información de marca', 'error');
+    }
   };
 
   // Funciones de gestión de categorías
-  const addCategory = (name) => {
-    const newCategory = {
-      id: Date.now(),
-      name
-    };
-    setCategories(prev => [...prev, newCategory]);
-    setShowAddCategory(false);
-    addNotification('Categoría agregada correctamente');
+  const addCategory = async (name) => {
+    try {
+      const newCategory = await supabaseService.createCategory(name);
+      setCategories(prev => [...prev, newCategory]);
+      setShowAddCategory(false);
+      addNotification('Categoría agregada correctamente');
+    } catch (error) {
+      console.error('Error adding category:', error);
+      addNotification('Error al agregar categoría', 'error');
+    }
   };
 
-  const updateCategory = (id, name) => {
-    setCategories(prev => prev.map(cat => cat.id === id ? { ...cat, name } : cat));
-    setEditingCategory(null);
-    addNotification('Categoría actualizada correctamente');
+  const updateCategory = async (id, name) => {
+    try {
+      const updated = await supabaseService.updateCategory(id, name);
+      setCategories(prev => prev.map(cat => cat.id === id ? updated : cat));
+      setEditingCategory(null);
+      addNotification('Categoría actualizada correctamente');
+    } catch (error) {
+      console.error('Error updating category:', error);
+      addNotification('Error al actualizar categoría', 'error');
+    }
   };
 
-  const deleteCategory = (id) => {
-    // Eliminar items del menú de esta categoría
-    setMenuItems(prev => prev.filter(item => item.categoryId !== id));
-    setCategories(prev => prev.filter(cat => cat.id !== id));
-    addNotification('Categoría eliminada correctamente');
+  const deleteCategory = async (id) => {
+    try {
+      await supabaseService.deleteCategory(id);
+      // Eliminar items del menú de esta categoría (CASCADE en DB)
+      setMenuItems(prev => prev.filter(item => item.categoryId !== id));
+      setCategories(prev => prev.filter(cat => cat.id !== id));
+      addNotification('Categoría eliminada correctamente');
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      addNotification('Error al eliminar categoría', 'error');
+    }
   };
 
   // Funciones de gestión de items del menú
-  const addMenuItem = (item) => {
-    const newItem = {
-      id: Date.now(),
-      ...item
-    };
-    setMenuItems(prev => [...prev, newItem]);
-    setShowAddMenuItem(false);
-    addNotification('Item agregado al menú correctamente');
+  const addMenuItem = async (item) => {
+    try {
+      const newItem = await supabaseService.createMenuItem({
+        category_id: item.categoryId,
+        name: item.name,
+        price: item.price,
+        image: item.image,
+        size: item.size,
+        unit: item.unit
+      });
+      setMenuItems(prev => [...prev, { ...newItem, categoryId: newItem.category_id }]);
+      setShowAddMenuItem(false);
+      addNotification('Item agregado al menú correctamente');
+    } catch (error) {
+      console.error('Error adding menu item:', error);
+      addNotification('Error al agregar item al menú', 'error');
+    }
   };
 
-  const updateMenuItem = (id, updatedItem) => {
-    setMenuItems(prev => prev.map(item => item.id === id ? { ...item, ...updatedItem } : item));
-    setEditingMenuItem(null);
-    addNotification('Item actualizado correctamente');
+  const updateMenuItem = async (id, updatedItem) => {
+    try {
+      const updated = await supabaseService.updateMenuItem(id, {
+        category_id: updatedItem.categoryId,
+        name: updatedItem.name,
+        price: updatedItem.price,
+        image: updatedItem.image,
+        size: updatedItem.size,
+        unit: updatedItem.unit
+      });
+      setMenuItems(prev => prev.map(item => item.id === id ? { ...updated, categoryId: updated.category_id } : item));
+      setEditingMenuItem(null);
+      addNotification('Item actualizado correctamente');
+    } catch (error) {
+      console.error('Error updating menu item:', error);
+      addNotification('Error al actualizar item', 'error');
+    }
   };
 
-  const deleteMenuItem = (id) => {
-    setMenuItems(prev => prev.filter(item => item.id !== id));
-    addNotification('Item eliminado del menú correctamente');
+  const deleteMenuItem = async (id) => {
+    try {
+      await supabaseService.deleteMenuItem(id);
+      setMenuItems(prev => prev.filter(item => item.id !== id));
+      addNotification('Item eliminado del menú correctamente');
+    } catch (error) {
+      console.error('Error deleting menu item:', error);
+      addNotification('Error al eliminar item', 'error');
+    }
   };
 
   // Funciones de gestión de mesas
-  const addTable = (number, name) => {
-    const newTable = {
-      id: Date.now(),
-      number: parseInt(number),
-      name: name || `Mesa ${number}`,
-      status: 'Disponible'
-    };
-    setTables(prev => [...prev, newTable]);
-    setShowAddTable(false);
-    addNotification('Mesa agregada correctamente');
+  const addTable = async (number, name) => {
+    try {
+      const newTable = await supabaseService.createTable(number, name);
+      setTables(prev => [...prev, newTable]);
+      setShowAddTable(false);
+      addNotification('Mesa agregada correctamente');
+    } catch (error) {
+      console.error('Error adding table:', error);
+      addNotification('Error al agregar mesa', 'error');
+    }
   };
 
-  const updateTable = (id, number, name) => {
-    setTables(prev => prev.map(table =>
-      table.id === id ? { ...table, number: parseInt(number), name: name || `Mesa ${number}` } : table
-    ));
-    setEditingTable(null);
-    addNotification('Mesa actualizada correctamente');
+  const updateTable = async (id, number, name) => {
+    try {
+      const updated = await supabaseService.updateTable(id, number, name);
+      setTables(prev => prev.map(table => table.id === id ? updated : table));
+      setEditingTable(null);
+      addNotification('Mesa actualizada correctamente');
+    } catch (error) {
+      console.error('Error updating table:', error);
+      addNotification('Error al actualizar mesa', 'error');
+    }
   };
 
-  const deleteTable = (id) => {
-    setTables(prev => prev.filter(table => table.id !== id));
-    addNotification('Mesa eliminada correctamente');
+  const deleteTable = async (id) => {
+    try {
+      await supabaseService.deleteTable(id);
+      setTables(prev => prev.filter(table => table.id !== id));
+      addNotification('Mesa eliminada correctamente');
+    } catch (error) {
+      console.error('Error deleting table:', error);
+      addNotification('Error al eliminar mesa', 'error');
+    }
   };
 
   const printQR = (table) => {
@@ -208,49 +297,57 @@ function App() {
     setCart(prev => prev.filter(item => item.id !== itemId));
   };
 
-  const placeOrder = () => {
+  const placeOrder = async () => {
     if (cart.length === 0) return;
 
-    const table = tables.find(t => t.number === currentTable);
-    const newOrder = {
-      id: Date.now(),
-      tableNumber: currentTable,
-      tableName: table?.name || `Mesa ${currentTable}`,
-      items: cart.map(item => ({
-        ...item,
-        subtotal: item.price * item.quantity
-      })),
-      total: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0),
-      status: 'Pendiente',
-      estimatedTime: null,
-      startTime: null,
-      timestamp: new Date().toLocaleTimeString()
-    };
+    try {
+      const table = tables.find(t => t.number === currentTable);
+      const newOrder = await supabaseService.createOrder({
+        tableId: table.id,
+        tableNumber: currentTable,
+        tableName: table?.name || `Mesa ${currentTable}`,
+        items: cart.map(item => ({
+          ...item,
+          subtotal: item.price * item.quantity
+        })),
+        total: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+      });
 
-    setOrders(prev => [...prev, newOrder]);
-    setTables(prev => prev.map(t =>
-      t.number === currentTable ? { ...t, status: 'Ocupada' } : t
-    ));
-    setCart([]);
-    setOrderConfirmed(true);
+      setOrders(prev => [...prev, newOrder]);
 
-    // Persistent notification for new order
-    addNotification(`Nuevo pedido de ${table?.name || `Mesa ${currentTable}`}`, 'warning', true);
+      // Update table status
+      await supabaseService.updateTableStatus(table.id, 'Ocupada');
+      setTables(prev => prev.map(t =>
+        t.id === table.id ? { ...t, status: 'Ocupada' } : t
+      ));
 
-    setTimeout(() => {
-      setOrderConfirmed(false);
-      setClientTab('menu');
-    }, 2000);
+      setCart([]);
+      setOrderConfirmed(true);
+
+      // Persistent notification for new order
+      addNotification(`Nuevo pedido de ${table?.name || `Mesa ${currentTable}`}`, 'warning', true);
+
+      setTimeout(() => {
+        setOrderConfirmed(false);
+        setClientTab('menu');
+      }, 2000);
+    } catch (error) {
+      console.error('Error placing order:', error);
+      addNotification('Error al realizar el pedido', 'error');
+    }
   };
 
-  const callWaiter = () => {
+  const callWaiter = async () => {
     if (!waiterCalls.find(c => c.tableNumber === currentTable)) {
-      setWaiterCalls(prev => [...prev, {
-        id: Date.now(),
-        tableNumber: currentTable,
-        timestamp: new Date().toLocaleTimeString()
-      }]);
-      addNotification(`Mesa ${currentTable} llamando al mesero`, 'warning');
+      try {
+        const table = tables.find(t => t.number === currentTable);
+        const newCall = await supabaseService.createWaiterCall(currentTable, table.id);
+        setWaiterCalls(prev => [...prev, newCall]);
+        addNotification(`Mesa ${currentTable} llamando al mesero`, 'warning');
+      } catch (error) {
+        console.error('Error calling waiter:', error);
+        addNotification('Error al llamar al mesero', 'error');
+      }
     }
   };
 
@@ -277,43 +374,71 @@ function App() {
     setCurrentTable(null);
   };
 
-  const markCallAttended = (callId) => {
-    const call = waiterCalls.find(c => c.id === callId);
-    setWaiterCalls(prev => prev.filter(c => c.id !== callId));
-    if (call) {
-      addNotification(`Llamada de Mesa ${call.tableNumber} atendida`, 'success');
-    }
-  };
-
-  const setEstimatedTime = (orderId, minutes) => {
-    setOrders(prev => prev.map(order =>
-      order.id === orderId ? { ...order, estimatedTime: parseInt(minutes) } : order
-    ));
-    addNotification('Tiempo estimado configurado', 'success');
-  };
-
-  const startPreparation = (orderId) => {
-    setOrders(prev => prev.map(order =>
-      order.id === orderId ? { ...order, status: 'En preparación', startTime: Date.now() } : order
-    ));
-
-    // Dismiss persistent notification when order starts preparation
-    const order = orders.find(o => o.id === orderId);
-    if (order) {
-      const notif = notifications.find(n => n.message.includes(order.tableName));
-      if (notif) {
-        dismissNotification(notif.id);
+  const markCallAttended = async (callId) => {
+    try {
+      const call = waiterCalls.find(c => c.id === callId);
+      await supabaseService.markWaiterCallAttended(callId);
+      setWaiterCalls(prev => prev.filter(c => c.id !== callId));
+      if (call) {
+        addNotification(`Llamada de Mesa ${call.tableNumber} atendida`, 'success');
       }
+    } catch (error) {
+      console.error('Error marking call as attended:', error);
+      addNotification('Error al marcar llamada como atendida', 'error');
     }
-
-    addNotification('Pedido en preparación', 'info');
   };
 
-  const markAsDelivered = (orderId) => {
-    setOrders(prev => prev.map(order =>
-      order.id === orderId ? { ...order, status: 'Entregado' } : order
-    ));
-    addNotification('Pedido entregado', 'success');
+  const setEstimatedTime = async (orderId, minutes) => {
+    try {
+      await supabaseService.updateOrderStatus(orderId, 'Pendiente', {
+        estimated_time: parseInt(minutes)
+      });
+      setOrders(prev => prev.map(order =>
+        order.id === orderId ? { ...order, estimatedTime: parseInt(minutes), estimated_time: parseInt(minutes) } : order
+      ));
+      addNotification('Tiempo estimado configurado', 'success');
+    } catch (error) {
+      console.error('Error setting estimated time:', error);
+      addNotification('Error al configurar tiempo estimado', 'error');
+    }
+  };
+
+  const startPreparation = async (orderId) => {
+    try {
+      await supabaseService.updateOrderStatus(orderId, 'En preparación', {
+        start_time: Date.now()
+      });
+      setOrders(prev => prev.map(order =>
+        order.id === orderId ? { ...order, status: 'En preparación', startTime: Date.now(), start_time: Date.now() } : order
+      ));
+
+      // Dismiss persistent notification when order starts preparation
+      const order = orders.find(o => o.id === orderId);
+      if (order) {
+        const notif = notifications.find(n => n.message.includes(order.tableName));
+        if (notif) {
+          dismissNotification(notif.id);
+        }
+      }
+
+      addNotification('Pedido en preparación', 'info');
+    } catch (error) {
+      console.error('Error starting preparation:', error);
+      addNotification('Error al iniciar preparación', 'error');
+    }
+  };
+
+  const markAsDelivered = async (orderId) => {
+    try {
+      await supabaseService.updateOrderStatus(orderId, 'Entregado');
+      setOrders(prev => prev.map(order =>
+        order.id === orderId ? { ...order, status: 'Entregado' } : order
+      ));
+      addNotification('Pedido entregado', 'success');
+    } catch (error) {
+      console.error('Error marking as delivered:', error);
+      addNotification('Error al marcar como entregado', 'error');
+    }
   };
 
   const accessClientView = (tableNumber) => {
@@ -796,7 +921,14 @@ function App() {
 
   // BRAND MANAGEMENT COMPONENT
   const BrandManagement = () => {
-    const [formData, setFormData] = useState(business);
+    const [formData, setFormData] = useState(business || {
+      id: 'vanshelatto',
+      name: '',
+      logo: '🍦',
+      logoUrl: null,
+      tagline: '',
+      description: ''
+    });
     const fileInputRef = useRef(null);
 
     const handleLogoUpload = (e) => {
@@ -1970,6 +2102,18 @@ function App() {
     );
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 text-lg">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <NotificationContainer />
@@ -1977,7 +2121,7 @@ function App() {
       {currentView === 'login' && <LoginPage />}
       {currentView === 'admin' && <AdminPanel />}
       {currentView === 'client' && <ClientView />}
-      {showQRModal && <QRModal table={showQRModal} businessId={business.id} onClose={() => setShowQRModal(null)} />}
+      {showQRModal && business && <QRModal table={showQRModal} businessId={business.id} onClose={() => setShowQRModal(null)} />}
     </>
   );
 }
