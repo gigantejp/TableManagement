@@ -42,6 +42,7 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
           cd restaurant-qr
+          rm -rf node_modules/.vite
           npm run build
 
       - name: Setup Pages
