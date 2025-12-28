@@ -79,13 +79,8 @@ function App() {
 
           if (userBusiness) {
             await loadBusinessData(userBusiness.id);
-          }
-        } else {
-          // Si no hay usuario autenticado, cargar datos demo (vanshelatto)
-          try {
-            await loadBusinessData('vanshelatto');
-          } catch (error) {
-            console.log('No demo business found');
+          } else {
+            console.log('User has no business associated');
           }
         }
       } catch (error) {
@@ -209,7 +204,7 @@ function App() {
   // Funciones de gestión de marca
   const saveBrandChanges = async (newBrand) => {
     try {
-      const updated = await supabaseService.updateBusiness('vanshelatto', {
+      const updated = await supabaseService.updateBusiness(business.id, {
         name: newBrand.name,
         logo: newBrand.logo,
         logo_url: newBrand.logoUrl,
@@ -526,7 +521,7 @@ function App() {
 
   const accessClientView = (tableNumber) => {
     setCurrentTable(tableNumber);
-    navigate(`/table/${tableNumber}`);
+    navigate(`/${business.slug}/table/${tableNumber}`);
     setClientTab('menu');
     setCart([]);
     setShowAccount(false);
@@ -1069,7 +1064,7 @@ function App() {
   // BRAND MANAGEMENT COMPONENT
   const BrandManagement = () => {
     const [formData, setFormData] = useState(business || {
-      id: 'vanshelatto',
+      id: '',
       name: '',
       logo: '🍦',
       logoUrl: null,
@@ -1317,7 +1312,7 @@ function App() {
             <TableCard
               key={table.id}
               table={table}
-              businessId={business.id}
+              businessSlug={business.slug}
               onEdit={() => setEditingTable(table)}
               onDelete={() => deleteTable(table.id)}
               onPrintQR={() => printQR(table)}
@@ -1643,7 +1638,7 @@ function App() {
     </div>
   );
 
-  const TableCard = ({ table, businessId, onEdit, onDelete, onPrintQR, onAccess }) => (
+  const TableCard = ({ table, businessSlug, onEdit, onDelete, onPrintQR, onAccess }) => (
     <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md transition">
       <div className="flex justify-between items-start mb-4">
         <div>
@@ -1661,7 +1656,7 @@ function App() {
       <div className="bg-gray-50 p-3 rounded-lg mb-4">
         <p className="text-xs text-gray-500 mb-1">URL de acceso:</p>
         <p className="text-sm text-gray-700 font-mono break-all">
-          {window.location.origin}/{businessId}/table/{table.number}
+          {window.location.origin}/{businessSlug}/table/{table.number}
         </p>
       </div>
 
@@ -1687,7 +1682,7 @@ function App() {
   );
 
   // QR MODAL COMPONENT
-  const QRModal = ({ table, businessId, onClose }) => {
+  const QRModal = ({ table, businessSlug, onClose }) => {
     const qrRef = useRef(null);
 
     const downloadQR = () => {
@@ -1717,7 +1712,7 @@ function App() {
           <div className="text-center">
             <div ref={qrRef} className="bg-white p-6 rounded-xl inline-block">
               <QRCodeCanvas
-                value={`${window.location.origin}/${businessId}/table/${table.number}`}
+                value={`${window.location.origin}/${businessSlug}/table/${table.number}`}
                 size={256}
                 level="H"
                 includeMargin={true}
@@ -2436,17 +2431,13 @@ function App() {
             <AdminPanel tab="orders" />
           </ProtectedRoute>
         } />
-        <Route path="/table/:tableNumber" element={
+        <Route path="/:businessSlug/table/:tableNumber" element={
           <ClientView
-            business={business}
-            categories={categories}
-            menuItems={menuItems}
-            tables={tables}
             addNotification={addNotification}
           />
         } />
       </Routes>
-      {showQRModal && business && <QRModal table={showQRModal} businessId={business.id} onClose={() => setShowQRModal(null)} />}
+      {showQRModal && business && <QRModal table={showQRModal} businessSlug={business.slug} onClose={() => setShowQRModal(null)} />}
     </>
   );
 }

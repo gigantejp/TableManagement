@@ -1,12 +1,10 @@
 import { supabase } from './supabase'
 
-const BUSINESS_ID = 'vanshelatto'
-
 // =====================================================
 // BUSINESS OPERATIONS
 // =====================================================
 
-export const fetchBusiness = async (businessId = BUSINESS_ID) => {
+export const fetchBusiness = async (businessId) => {
   const { data, error } = await supabase
     .from('businesses')
     .select('*')
@@ -33,7 +31,7 @@ export const updateBusiness = async (businessId, updates) => {
 // CATEGORIES OPERATIONS
 // =====================================================
 
-export const fetchCategories = async (businessId = BUSINESS_ID) => {
+export const fetchCategories = async (businessId) => {
   const { data, error } = await supabase
     .from('categories')
     .select('*')
@@ -44,7 +42,7 @@ export const fetchCategories = async (businessId = BUSINESS_ID) => {
   return data
 }
 
-export const createCategory = async (name, businessId = BUSINESS_ID) => {
+export const createCategory = async (name, businessId) => {
   const { data, error } = await supabase
     .from('categories')
     .insert([{ business_id: businessId, name }])
@@ -80,7 +78,7 @@ export const deleteCategory = async (id) => {
 // MENU ITEMS OPERATIONS
 // =====================================================
 
-export const fetchMenuItems = async (businessId = BUSINESS_ID) => {
+export const fetchMenuItems = async (businessId) => {
   const { data, error } = await supabase
     .from('menu_items')
     .select('*')
@@ -91,7 +89,7 @@ export const fetchMenuItems = async (businessId = BUSINESS_ID) => {
   return data
 }
 
-export const createMenuItem = async (item, businessId = BUSINESS_ID) => {
+export const createMenuItem = async (item, businessId) => {
   const { data, error } = await supabase
     .from('menu_items')
     .insert([{ ...item, business_id: businessId }])
@@ -127,7 +125,7 @@ export const deleteMenuItem = async (id) => {
 // TABLES OPERATIONS
 // =====================================================
 
-export const fetchTables = async (businessId = BUSINESS_ID) => {
+export const fetchTables = async (businessId) => {
   const { data, error } = await supabase
     .from('tables')
     .select('*')
@@ -138,7 +136,7 @@ export const fetchTables = async (businessId = BUSINESS_ID) => {
   return data
 }
 
-export const createTable = async (number, name, businessId = BUSINESS_ID) => {
+export const createTable = async (number, name, businessId) => {
   const { data, error } = await supabase
     .from('tables')
     .insert([{
@@ -194,7 +192,7 @@ export const deleteTable = async (id) => {
 // ORDERS OPERATIONS
 // =====================================================
 
-export const fetchOrders = async (businessId = BUSINESS_ID) => {
+export const fetchOrders = async (businessId) => {
   const { data, error } = await supabase
     .from('orders')
     .select(`
@@ -214,7 +212,7 @@ export const fetchOrders = async (businessId = BUSINESS_ID) => {
   }))
 }
 
-export const createOrder = async (orderData, businessId = BUSINESS_ID) => {
+export const createOrder = async (orderData, businessId) => {
   // First create the order
   const { data: order, error: orderError } = await supabase
     .from('orders')
@@ -280,7 +278,7 @@ export const updateOrderStatus = async (id, status, additionalData = {}) => {
 // WAITER CALLS OPERATIONS
 // =====================================================
 
-export const fetchWaiterCalls = async (businessId = BUSINESS_ID) => {
+export const fetchWaiterCalls = async (businessId) => {
   const { data, error } = await supabase
     .from('waiter_calls')
     .select('*')
@@ -297,7 +295,7 @@ export const fetchWaiterCalls = async (businessId = BUSINESS_ID) => {
   }))
 }
 
-export const createWaiterCall = async (tableNumber, tableId, businessId = BUSINESS_ID) => {
+export const createWaiterCall = async (tableNumber, tableId, businessId) => {
   const { data, error } = await supabase
     .from('waiter_calls')
     .insert([{
@@ -470,7 +468,7 @@ export const closeSession = async (sessionId, paymentMethod = 'admin') => {
   return data
 }
 
-export const fetchActiveSessions = async (businessId = BUSINESS_ID) => {
+export const fetchActiveSessions = async (businessId) => {
   const { data, error } = await supabase
     .from('table_sessions')
     .select('*')
@@ -616,7 +614,7 @@ export const getSessionOrders = async (sessionId) => {
   }))
 }
 
-export const createOrderFromCart = async (sessionId, businessId = BUSINESS_ID) => {
+export const createOrderFromCart = async (sessionId, businessId) => {
   // Get cart items
   const cartItems = await getCartItems(sessionId)
 

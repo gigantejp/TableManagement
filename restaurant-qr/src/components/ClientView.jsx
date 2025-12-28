@@ -4,10 +4,17 @@ import {
   Bell, Plus, Trash2, Check, ShoppingCart, ArrowLeft, CreditCard, ChefHat, Clock
 } from 'lucide-react';
 import * as supabaseService from '../lib/supabaseService';
+import { supabase } from '../lib/supabase';
 
-function ClientView({ business, categories, menuItems, tables, addNotification }) {
-  const { tableNumber } = useParams();
+function ClientView({ addNotification }) {
+  const { businessSlug, tableNumber } = useParams();
   const navigate = useNavigate();
+
+  // Business data state
+  const [business, setBusiness] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [menuItems, setMenuItems] = useState([]);
+  const [tables, setTables] = useState([]);
 
   // Session and table state
   const [currentSession, setCurrentSession] = useState(null);
@@ -23,6 +30,47 @@ function ClientView({ business, categories, menuItems, tables, addNotification }
 
   // Order status timer
   const [timeLeft, setTimeLeft] = useState(0);
+
+  // Load business data first
+  useEffect(() => {
+    const loadBusinessData = async () => {
+      try {
+        // Get business by slug
+        const { data: businessData, error: businessError } = await supabase
+          .from('businesses')
+          .select('*')
+          .eq('slug', businessSlug)
+          .single();
+
+        if (businessError) {
+          console.error('Error loading business:', businessError);
+          addNotification('Negocio no encontrado', 'error');
+          navigate('/');
+          return;
+        }
+
+        setBusiness(businessData);
+
+        // Load business categories, menu, and tables
+        const [categoriesData, menuItemsData, tablesData] = await Promise.all([
+          supabaseService.fetchCategories(businessData.id),
+          supabaseService.fetchMenuItems(businessData.id),
+          supabaseService.fetchTables(businessData.id)
+        ]);
+
+        setCategories(categoriesData);
+        setMenuItems(menuItemsData);
+        setTables(tablesData);
+      } catch (error) {
+        console.error('Error loading business data:', error);
+        addNotification('Error al cargar datos del negocio', 'error');
+      }
+    };
+
+    if (businessSlug) {
+      loadBusinessData();
+    }
+  }, [businessSlug, navigate, addNotification]);
 
   // Initialize session when component loads
   useEffect(() => {
