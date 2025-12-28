@@ -28,12 +28,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: restaurant-qr/package-lock.json
 
-      - name: Install dependencies
+      - name: Clean and install dependencies
         run: |
           cd restaurant-qr
+          rm -rf node_modules dist .vite
           npm ci
 
       - name: Build
@@ -42,7 +41,6 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
           cd restaurant-qr
-          rm -rf node_modules/.vite
           npm run build
 
       - name: Setup Pages
