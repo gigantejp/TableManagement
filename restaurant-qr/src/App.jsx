@@ -1668,7 +1668,7 @@ function App() {
       <div className="bg-gray-50 p-3 rounded-lg mb-4">
         <p className="text-xs text-gray-500 mb-1">URL de acceso:</p>
         <p className="text-sm text-gray-700 font-mono break-all">
-          {window.location.origin}/{businessSlug}/table/{table.number}
+          {window.location.origin}/TableManagement/{businessSlug}/table/{table.number}
         </p>
       </div>
 
@@ -1724,7 +1724,7 @@ function App() {
           <div className="text-center">
             <div ref={qrRef} className="bg-white p-6 rounded-xl inline-block">
               <QRCodeCanvas
-                value={`${window.location.origin}/${businessSlug}/table/${table.number}`}
+                value={`${window.location.origin}/TableManagement/${businessSlug}/table/${table.number}`}
                 size={256}
                 level="H"
                 includeMargin={true}
