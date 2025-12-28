@@ -10,6 +10,7 @@ import { QRCodeCanvas } from 'qrcode.react';
 import * as supabaseService from './lib/supabaseService';
 import * as authService from './lib/authService';
 import RegisterPage from './components/RegisterPage';
+import ClientView from './components/ClientView';
 
 function App() {
   const navigate = useNavigate();
@@ -957,9 +958,9 @@ function App() {
                   }`}
                 >
                   Gestión de Pedidos
-                  {orders.filter(o => o.status === 'Pendiente').length > 0 && (
+                  {orders.filter(o => o.status === 'Solicitado').length > 0 && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                      {orders.filter(o => o.status === 'Pendiente').length}
+                      {orders.filter(o => o.status === 'Solicitado').length}
                     </span>
                   )}
                 </Link>
@@ -1345,25 +1346,76 @@ function App() {
 
   // ORDERS MANAGEMENT COMPONENT
   const OrdersManagement = () => {
+    const [activeSessions, setActiveSessions] = useState([]);
+
+    // Load active sessions
+    useEffect(() => {
+      const loadActiveSessions = async () => {
+        try {
+          const sessions = await supabaseService.fetchActiveSessions(business.id);
+          setActiveSessions(sessions);
+        } catch (error) {
+          console.error('Error loading sessions:', error);
+        }
+      };
+
+      if (business) {
+        loadActiveSessions();
+      }
+
+      // Subscribe to session changes
+      const subscription = supabaseService.subscribeToSessions(business.id, () => {
+        loadActiveSessions();
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }, [business]);
+
     const OrderCard = ({ order }) => {
-      const [estimatedMinutes, setEstimatedMinutes] = useState(order.estimatedTime || '');
+      const [estimatedMinutes, setEstimatedMinutes] = useState(order.estimated_time || '');
+
+      const handleStartPreparation = async () => {
+        try {
+          await supabaseService.updateOrderStatus(order.id, 'En proceso', {
+            estimated_time: parseInt(estimatedMinutes),
+            start_time: Date.now()
+          });
+          addNotification('Pedido en preparación', 'success');
+        } catch (error) {
+          console.error('Error starting preparation:', error);
+          addNotification('Error al iniciar preparación', 'error');
+        }
+      };
+
+      const handleMarkCompleted = async () => {
+        try {
+          await supabaseService.updateOrderStatus(order.id, 'Completado');
+          addNotification('Pedido completado', 'success');
+        } catch (error) {
+          console.error('Error marking as completed:', error);
+          addNotification('Error al completar pedido', 'error');
+        }
+      };
 
       return (
         <div className="bg-white border-2 border-gray-200 rounded-xl p-6 mb-4">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="bg-blue-100 p-3 rounded-lg">
-                <User className="text-blue-600" size={24} />
+                <ChefHat className="text-blue-600" size={24} />
               </div>
               <div>
-                <h4 className="text-xl font-bold text-gray-800">{order.tableName}</h4>
+                <h4 className="text-xl font-bold text-gray-800">{order.table_name}</h4>
                 <p className="text-sm text-gray-500">{order.timestamp}</p>
               </div>
             </div>
             <span className={`px-4 py-2 rounded-full font-semibold text-sm ${
-              order.status === 'Pendiente' ? 'bg-yellow-100 text-yellow-700' :
-              order.status === 'En preparación' ? 'bg-blue-100 text-blue-700' :
-              'bg-green-100 text-green-700'
+              order.status === 'Solicitado' ? 'bg-yellow-100 text-yellow-700' :
+              order.status === 'En proceso' ? 'bg-blue-100 text-blue-700' :
+              order.status === 'Completado' ? 'bg-green-100 text-green-700' :
+              'bg-gray-100 text-gray-700'
             }`}>
               {order.status}
             </span>
@@ -1383,7 +1435,7 @@ function App() {
             </div>
           </div>
 
-          {order.status === 'Pendiente' && (
+          {order.status === 'Solicitado' && (
             <div className="space-y-3">
               <div className="flex gap-2">
                 <input
@@ -1393,21 +1445,11 @@ function App() {
                   placeholder="Tiempo estimado (minutos)"
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
-                <button
-                  onClick={() => {
-                    if (estimatedMinutes) {
-                      setEstimatedTime(order.id, estimatedMinutes);
-                    }
-                  }}
-                  className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition"
-                >
-                  Establecer
-                </button>
               </div>
               <button
-                onClick={() => startPreparation(order.id)}
+                onClick={handleStartPreparation}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2"
-                disabled={!order.estimatedTime}
+                disabled={!estimatedMinutes}
               >
                 <ChefHat size={20} />
                 Comenzar Preparación
@@ -1415,17 +1457,17 @@ function App() {
             </div>
           )}
 
-          {order.status === 'En preparación' && (
+          {order.status === 'En proceso' && (
             <button
-              onClick={() => markAsDelivered(order.id)}
+              onClick={handleMarkCompleted}
               className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2"
             >
               <Check size={20} />
-              Marcar como Entregado
+              Marcar como Completado
             </button>
           )}
 
-          {order.status === 'Entregado' && (
+          {order.status === 'Completado' && (
             <div className="text-center py-2 text-green-600 font-semibold">
               ¡Pedido completado!
             </div>
@@ -1434,52 +1476,131 @@ function App() {
       );
     };
 
-    const pendingOrders = orders.filter(o => o.status === 'Pendiente');
-    const inProgressOrders = orders.filter(o => o.status === 'En preparación');
-    const deliveredOrders = orders.filter(o => o.status === 'Entregado');
+    const SessionCard = ({ session }) => {
+      const sessionOrders = orders.filter(o => o.session_id === session.id);
+      const table = tables.find(t => t.id === session.table_id);
+
+      const handleCloseSession = async () => {
+        if (!window.confirm(`¿Cerrar sesión de ${session.table_name}?`)) return;
+
+        try {
+          await supabaseService.closeSession(session.id, 'admin');
+          addNotification('Sesión cerrada', 'success');
+        } catch (error) {
+          console.error('Error closing session:', error);
+          addNotification('Error al cerrar sesión', 'error');
+        }
+      };
+
+      return (
+        <div className="bg-white border-2 border-purple-200 rounded-xl p-6 mb-4">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h4 className="text-xl font-bold text-gray-800">{session.table_name}</h4>
+              <p className="text-sm text-gray-500">
+                Inicio: {new Date(session.started_at).toLocaleString()}
+              </p>
+              <p className="text-sm text-gray-500">
+                Pedidos: {sessionOrders.length}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-purple-600">${parseFloat(session.total_amount).toFixed(2)}</p>
+              <p className="text-xs text-gray-500">Total de la sesión</p>
+            </div>
+          </div>
+
+          {sessionOrders.length > 0 && (
+            <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <h5 className="font-semibold text-gray-700 mb-2">Pedidos de esta sesión:</h5>
+              {sessionOrders.map(order => (
+                <div key={order.id} className="flex justify-between text-sm py-1">
+                  <span className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${
+                      order.status === 'Solicitado' ? 'bg-yellow-500' :
+                      order.status === 'En proceso' ? 'bg-blue-500' :
+                      'bg-green-500'
+                    }`}></span>
+                    {order.timestamp} - {order.status}
+                  </span>
+                  <span className="font-semibold">${order.total}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={handleCloseSession}
+            className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2"
+          >
+            <X size={20} />
+            Finalizar Sesión
+          </button>
+        </div>
+      );
+    };
+
+    const requestedOrders = orders.filter(o => o.status === 'Solicitado');
+    const inProgressOrders = orders.filter(o => o.status === 'En proceso');
+    const completedOrders = orders.filter(o => o.status === 'Completado');
 
     return (
-      <div>
-        <h3 className="text-xl font-bold text-gray-800 mb-6">Gestión de Pedidos</h3>
-
-        {orders.length === 0 ? (
-          <div className="bg-gray-50 rounded-xl p-12 text-center">
-            <ChefHat className="mx-auto text-gray-300 mb-4" size={64} />
-            <p className="text-gray-500 text-lg">No hay pedidos activos</p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {pendingOrders.length > 0 && (
-              <div>
-                <h4 className="font-semibold text-yellow-700 mb-3 flex items-center gap-2">
-                  <Clock size={20} />
-                  Pendientes ({pendingOrders.length})
-                </h4>
-                {pendingOrders.map(order => <OrderCard key={order.id} order={order} />)}
-              </div>
-            )}
-
-            {inProgressOrders.length > 0 && (
-              <div>
-                <h4 className="font-semibold text-blue-700 mb-3 flex items-center gap-2">
-                  <ChefHat size={20} />
-                  En Preparación ({inProgressOrders.length})
-                </h4>
-                {inProgressOrders.map(order => <OrderCard key={order.id} order={order} />)}
-              </div>
-            )}
-
-            {deliveredOrders.length > 0 && (
-              <div>
-                <h4 className="font-semibold text-green-700 mb-3 flex items-center gap-2">
-                  <Check size={20} />
-                  Entregados ({deliveredOrders.length})
-                </h4>
-                {deliveredOrders.map(order => <OrderCard key={order.id} order={order} />)}
-              </div>
-            )}
+      <div className="space-y-6">
+        {/* Active Sessions Section */}
+        {activeSessions.length > 0 && (
+          <div>
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Sesiones Activas ({activeSessions.length})</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {activeSessions.map(session => (
+                <SessionCard key={session.id} session={session} />
+              ))}
+            </div>
           </div>
         )}
+
+        {/* Orders Management */}
+        <div>
+          <h3 className="text-xl font-bold text-gray-800 mb-4">Gestión de Pedidos</h3>
+
+          {orders.length === 0 ? (
+            <div className="bg-gray-50 rounded-xl p-12 text-center">
+              <ChefHat className="mx-auto text-gray-300 mb-4" size={64} />
+              <p className="text-gray-500 text-lg">No hay pedidos activos</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {requestedOrders.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-yellow-700 mb-3 flex items-center gap-2">
+                    <AlertCircle size={20} />
+                    Solicitados ({requestedOrders.length})
+                  </h4>
+                  {requestedOrders.map(order => <OrderCard key={order.id} order={order} />)}
+                </div>
+              )}
+
+              {inProgressOrders.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-blue-700 mb-3 flex items-center gap-2">
+                    <ChefHat size={20} />
+                    En Proceso ({inProgressOrders.length})
+                  </h4>
+                  {inProgressOrders.map(order => <OrderCard key={order.id} order={order} />)}
+                </div>
+              )}
+
+              {completedOrders.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-green-700 mb-3 flex items-center gap-2">
+                    <Check size={20} />
+                    Completados ({completedOrders.length})
+                  </h4>
+                  {completedOrders.map(order => <OrderCard key={order.id} order={order} />)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     );
   };
@@ -2315,7 +2436,15 @@ function App() {
             <AdminPanel tab="orders" />
           </ProtectedRoute>
         } />
-        <Route path="/table/:tableNumber" element={<ClientViewWrapper />} />
+        <Route path="/table/:tableNumber" element={
+          <ClientView
+            business={business}
+            categories={categories}
+            menuItems={menuItems}
+            tables={tables}
+            addNotification={addNotification}
+          />
+        } />
       </Routes>
       {showQRModal && business && <QRModal table={showQRModal} businessId={business.id} onClose={() => setShowQRModal(null)} />}
     </>
