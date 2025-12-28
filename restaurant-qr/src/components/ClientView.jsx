@@ -7,6 +7,7 @@ import * as supabaseService from '../lib/supabaseService';
 import { supabase } from '../lib/supabase';
 
 function ClientView({ addNotification }) {
+  console.log('ClientView v2.0 - Multi-tenant with loading states');
   const { businessSlug, tableNumber } = useParams();
   const navigate = useNavigate();
 
