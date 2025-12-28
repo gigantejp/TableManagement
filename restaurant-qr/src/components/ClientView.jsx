@@ -411,8 +411,8 @@ function ClientView({ addNotification }) {
             </Link>
             <div>
               <div className="flex items-center gap-2">
-                {business.logoUrl ? (
-                  <img src={business.logoUrl} alt={business.name} className="w-8 h-8 rounded-full object-cover" />
+                {business.logo_url ? (
+                  <img src={business.logo_url} alt={business.name} className="w-8 h-8 rounded-full object-cover" />
                 ) : (
                   <span className="text-2xl">{business.logo}</span>
                 )}

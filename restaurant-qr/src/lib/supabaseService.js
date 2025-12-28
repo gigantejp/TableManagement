@@ -732,3 +732,66 @@ export const subscribeToCart = (sessionId, callback) => {
     )
     .subscribe()
 }
+
+// =====================================================
+// STORAGE OPERATIONS - Image Upload
+// =====================================================
+
+/**
+ * Uploads an image file to Supabase Storage and returns the public URL
+ * @param {File} file - The image file to upload
+ * @param {string} businessId - The business ID for organizing files
+ * @param {string} type - Type of image (e.g., 'logo', 'menu-item')
+ * @returns {Promise<string>} The public URL of the uploaded image
+ */
+export const uploadImage = async (file, businessId, type = 'logo') => {
+  try {
+    // Create a unique filename with timestamp
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${businessId}/${type}-${Date.now()}.${fileExt}`
+
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('business-images')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: true
+      })
+
+    if (error) throw error
+
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('business-images')
+      .getPublicUrl(fileName)
+
+    return publicUrl
+  } catch (error) {
+    console.error('Error uploading image:', error)
+    throw error
+  }
+}
+
+/**
+ * Deletes an image from Supabase Storage
+ * @param {string} fileUrl - The public URL of the file to delete
+ * @returns {Promise<void>}
+ */
+export const deleteImage = async (fileUrl) => {
+  try {
+    // Extract the file path from the URL
+    const urlParts = fileUrl.split('/business-images/')
+    if (urlParts.length < 2) return
+
+    const filePath = urlParts[1]
+
+    const { error } = await supabase.storage
+      .from('business-images')
+      .remove([filePath])
+
+    if (error) throw error
+  } catch (error) {
+    console.error('Error deleting image:', error)
+    // Don't throw - deletion errors shouldn't block the main operation
+  }
+}

@@ -202,12 +202,26 @@ function App() {
   };
 
   // Funciones de gestión de marca
-  const saveBrandChanges = async (newBrand) => {
+  const saveBrandChanges = async (newBrand, imageFile = null) => {
     try {
+      let logoUrl = newBrand.logoUrl;
+
+      // If there's a new image file, upload it to Supabase Storage
+      if (imageFile) {
+        addNotification('Subiendo imagen...', 'info');
+        try {
+          logoUrl = await supabaseService.uploadImage(imageFile, business.id, 'logo');
+          addNotification('Imagen subida correctamente');
+        } catch (uploadError) {
+          console.error('Error uploading image:', uploadError);
+          addNotification('Error al subir la imagen, pero se guardarán los otros cambios', 'error');
+        }
+      }
+
       const updated = await supabaseService.updateBusiness(business.id, {
         name: newBrand.name,
         logo: newBrand.logo,
-        logo_url: newBrand.logoUrl,
+        logo_url: logoUrl,
         tagline: newBrand.tagline,
         description: newBrand.description
       });
@@ -845,8 +859,8 @@ function App() {
         <header className="bg-white shadow-sm sticky top-0 z-40">
           <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {business.logoUrl ? (
-                <img src={business.logoUrl} alt={business.name} className="w-16 h-16 rounded-full object-cover" />
+              {business.logo_url ? (
+                <img src={business.logo_url} alt={business.name} className="w-16 h-16 rounded-full object-cover" />
               ) : (
                 <div className="text-4xl">{business.logo}</div>
               )}
@@ -1083,17 +1097,33 @@ function App() {
       tagline: '',
       description: ''
     });
+    const [imageFile, setImageFile] = useState(null);
+    const [imagePreview, setImagePreview] = useState(business?.logo_url || null);
     const fileInputRef = useRef(null);
 
     const handleLogoUpload = (e) => {
       const file = e.target.files[0];
       if (file && file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          setFormData({...formData, logoUrl: event.target.result});
-        };
-        reader.readAsDataURL(file);
+        setImageFile(file);
+        // Create a preview URL for immediate display
+        const previewUrl = URL.createObjectURL(file);
+        setImagePreview(previewUrl);
       }
+    };
+
+    const handleRemoveLogo = () => {
+      setImageFile(null);
+      setImagePreview(null);
+      setFormData({...formData, logoUrl: null});
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
+
+    const handleSave = async () => {
+      await saveBrandChanges(formData, imageFile);
+      // Reset image file after saving
+      setImageFile(null);
     };
 
     return (
@@ -1115,11 +1145,11 @@ function App() {
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">Logo de la Marca</label>
             <div className="flex items-center gap-4">
-              {formData.logoUrl ? (
+              {imagePreview ? (
                 <div className="relative">
-                  <img src={formData.logoUrl} alt="Logo" className="w-24 h-24 object-cover rounded-lg border-2 border-gray-300" />
+                  <img src={imagePreview} alt="Logo" className="w-24 h-24 object-cover rounded-lg border-2 border-gray-300" />
                   <button
-                    onClick={() => setFormData({...formData, logoUrl: null})}
+                    onClick={handleRemoveLogo}
                     className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition"
                   >
                     <X size={16} />
@@ -1143,11 +1173,16 @@ function App() {
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition"
                 >
                   <Upload size={20} />
-                  Subir Imagen
+                  {imagePreview ? 'Cambiar Imagen' : 'Subir Imagen'}
                 </button>
                 <p className="text-xs text-gray-500 mt-2">
                   Sube una imagen de tu logo. Se mostrará en el menú digital.
                 </p>
+                {imageFile && (
+                  <p className="text-xs text-green-600 mt-1">
+                    ✓ Nueva imagen seleccionada: {imageFile.name}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -1188,7 +1223,7 @@ function App() {
           </div>
 
           <button
-            onClick={() => saveBrandChanges(formData)}
+            onClick={handleSave}
             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition flex items-center gap-2"
           >
             <Save size={20} />
@@ -2192,8 +2227,8 @@ function App() {
               </Link>
               <div>
                 <div className="flex items-center gap-2">
-                  {business.logoUrl ? (
-                    <img src={business.logoUrl} alt={business.name} className="w-8 h-8 rounded-full object-cover" />
+                  {business.logo_url ? (
+                    <img src={business.logo_url} alt={business.name} className="w-8 h-8 rounded-full object-cover" />
                   ) : (
                     <span className="text-2xl">{business.logo}</span>
                   )}
