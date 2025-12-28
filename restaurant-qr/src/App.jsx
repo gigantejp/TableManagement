@@ -223,7 +223,7 @@ function App() {
   // Funciones de gestión de categorías
   const addCategory = async (name) => {
     try {
-      const newCategory = await supabaseService.createCategory(name);
+      const newCategory = await supabaseService.createCategory(name, business.id);
       setCategories(prev => [...prev, newCategory]);
       setShowAddCategory(false);
       addNotification('Categoría agregada correctamente');
@@ -268,7 +268,7 @@ function App() {
         image: item.image,
         size: item.size,
         unit: item.unit
-      });
+      }, business.id);
       setMenuItems(prev => [...prev, { ...newItem, categoryId: newItem.category_id }]);
       setShowAddMenuItem(false);
       addNotification('Item agregado al menú correctamente');
@@ -311,7 +311,7 @@ function App() {
   // Funciones de gestión de mesas
   const addTable = async (number, name) => {
     try {
-      const newTable = await supabaseService.createTable(number, name);
+      const newTable = await supabaseService.createTable(number, name, business.id);
       setTables(prev => [...prev, newTable]);
       setShowAddTable(false);
       addNotification('Mesa agregada correctamente');
@@ -389,7 +389,7 @@ function App() {
           subtotal: item.price * item.quantity
         })),
         total: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-      });
+      }, business.id);
 
       setOrders(prev => [...prev, newOrder]);
 
@@ -419,7 +419,7 @@ function App() {
     if (!waiterCalls.find(c => c.tableNumber === currentTable)) {
       try {
         const table = tables.find(t => t.number === currentTable);
-        const newCall = await supabaseService.createWaiterCall(currentTable, table.id);
+        const newCall = await supabaseService.createWaiterCall(currentTable, table.id, business.id);
         setWaiterCalls(prev => [...prev, newCall]);
         addNotification(`Mesa ${currentTable} llamando al mesero`, 'warning');
       } catch (error) {
