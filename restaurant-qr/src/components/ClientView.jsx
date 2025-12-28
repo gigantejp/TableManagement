@@ -383,6 +383,18 @@ function ClientView({ addNotification }) {
     );
   }
 
+  // Show loading state while business data is loading
+  if (!business || !currentTable) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando menú...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Main client view
   return (
     <div className="min-h-screen bg-gray-50 pb-32">
