@@ -827,6 +827,18 @@ function App() {
     const availableTables = tables.filter(t => t.status === 'Disponible').length;
     const adminTab = tab || 'brand';
 
+    // Show loading state if business data hasn't loaded yet
+    if (!business) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Cargando datos del negocio...</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
