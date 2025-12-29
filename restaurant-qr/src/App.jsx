@@ -859,11 +859,7 @@ function App() {
         <header className="bg-white shadow-sm sticky top-0 z-40">
           <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {business.logo_url ? (
-                <img src={business.logo_url} alt={business.name} className="w-16 h-16 rounded-full object-cover" />
-              ) : (
-                <div className="text-4xl">{business.logo}</div>
-              )}
+              <div className="text-4xl">{business.logo}</div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-800">{business.name}</h1>
                 <p className="text-sm text-gray-600">{business.tagline}</p>
@@ -2227,11 +2223,7 @@ function App() {
               </Link>
               <div>
                 <div className="flex items-center gap-2">
-                  {business.logo_url ? (
-                    <img src={business.logo_url} alt={business.name} className="w-8 h-8 rounded-full object-cover" />
-                  ) : (
-                    <span className="text-2xl">{business.logo}</span>
-                  )}
+                  <span className="text-2xl">{business.logo}</span>
                   <span className="font-bold">{business.name}</span>
                 </div>
                 <p className="text-sm text-blue-100">Mesa {currentTable}</p>
