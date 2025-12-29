@@ -638,7 +638,7 @@ export const createOrderFromCart = async (sessionId, businessId) => {
       table_number: session.table_number,
       table_name: session.table_name,
       total: total,
-      status: 'Solicitado'
+      status: 'Pendiente'
     }])
     .select()
     .single()

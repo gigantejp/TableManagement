@@ -975,9 +975,9 @@ function App() {
                   }`}
                 >
                   Gestión de Pedidos
-                  {orders.filter(o => o.status === 'Solicitado').length > 0 && (
+                  {orders.filter(o => o.status === 'Pendiente').length > 0 && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                      {orders.filter(o => o.status === 'Solicitado').length}
+                      {orders.filter(o => o.status === 'Pendiente').length}
                     </span>
                   )}
                 </Link>
@@ -1450,7 +1450,7 @@ function App() {
               </div>
             </div>
             <span className={`px-4 py-2 rounded-full font-semibold text-sm ${
-              order.status === 'Solicitado' ? 'bg-yellow-100 text-yellow-700' :
+              order.status === 'Pendiente' ? 'bg-yellow-100 text-yellow-700' :
               order.status === 'En proceso' ? 'bg-blue-100 text-blue-700' :
               order.status === 'Completado' ? 'bg-green-100 text-green-700' :
               'bg-gray-100 text-gray-700'
@@ -1473,7 +1473,7 @@ function App() {
             </div>
           </div>
 
-          {order.status === 'Solicitado' && (
+          {order.status === 'Pendiente' && (
             <div className="space-y-3">
               <div className="flex gap-2">
                 <input
@@ -1555,7 +1555,7 @@ function App() {
                 <div key={order.id} className="flex justify-between text-sm py-1">
                   <span className="flex items-center gap-2">
                     <span className={`w-2 h-2 rounded-full ${
-                      order.status === 'Solicitado' ? 'bg-yellow-500' :
+                      order.status === 'Pendiente' ? 'bg-yellow-500' :
                       order.status === 'En proceso' ? 'bg-blue-500' :
                       'bg-green-500'
                     }`}></span>
@@ -1578,7 +1578,7 @@ function App() {
       );
     };
 
-    const requestedOrders = orders.filter(o => o.status === 'Solicitado');
+    const requestedOrders = orders.filter(o => o.status === 'Pendiente');
     const inProgressOrders = orders.filter(o => o.status === 'En proceso');
     const completedOrders = orders.filter(o => o.status === 'Completado');
 
@@ -1611,7 +1611,7 @@ function App() {
                 <div>
                   <h4 className="font-semibold text-yellow-700 mb-3 flex items-center gap-2">
                     <AlertCircle size={20} />
-                    Solicitados ({requestedOrders.length})
+                    Pendientes ({requestedOrders.length})
                   </h4>
                   {requestedOrders.map(order => <OrderCard key={order.id} order={order} />)}
                 </div>
