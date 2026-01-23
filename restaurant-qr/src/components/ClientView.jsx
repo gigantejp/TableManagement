@@ -495,9 +495,14 @@ function ClientView({ addNotification }) {
                       <div key={item.id} className="bg-white rounded-xl p-4 shadow-sm flex items-center gap-4">
                         <div className="text-5xl">{item.image}</div>
                         <div className="flex-1">
-                          <h4 className="font-semibold text-gray-800">{item.name}</h4>
-                          <p className="text-sm text-gray-500">{item.size} - {item.unit}</p>
-                          <p className="text-blue-600 font-bold text-lg">${item.price}</p>
+                          <h4 className="font-semibold text-gray-800">
+                            {item.name}
+                            {item.size && <span className="text-gray-600 font-normal"> ({item.size})</span>}
+                          </h4>
+                          {item.description && (
+                            <p className="text-sm text-gray-500 mt-1">{item.description}</p>
+                          )}
+                          <p className="text-blue-600 font-bold text-lg mt-2">${item.price}</p>
                         </div>
                         <button
                           onClick={() => addToCart(item)}
@@ -529,14 +534,19 @@ function ClientView({ addNotification }) {
               </div>
             ) : (
               <div className="space-y-4">
-                {cart.map(item => (
-                  <div key={item.id} className="bg-white rounded-xl p-4 shadow-sm">
-                    <div className="flex items-center gap-4">
-                      <div className="text-4xl">{menuItems.find(mi => mi.id === item.menu_item_id)?.image || '🍽️'}</div>
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-gray-800">{item.name}</h4>
-                        <p className="text-blue-600 font-bold">${item.price}</p>
-                      </div>
+                {cart.map(item => {
+                  const menuItem = menuItems.find(mi => mi.id === item.menu_item_id);
+                  return (
+                    <div key={item.id} className="bg-white rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center gap-4">
+                        <div className="text-4xl">{menuItem?.image || '🍽️'}</div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-800">
+                            {item.name}
+                            {menuItem?.size && <span className="text-gray-600 font-normal text-sm"> ({menuItem.size})</span>}
+                          </h4>
+                          <p className="text-blue-600 font-bold">${item.price}</p>
+                        </div>
                       <div className="flex items-center gap-3">
                         <button
                           onClick={() => updateCartQuantity(item.id, -1)}
@@ -563,7 +573,8 @@ function ClientView({ addNotification }) {
                       <span className="text-gray-600">Subtotal: <span className="font-bold text-gray-800">${parseFloat(item.subtotal).toFixed(2)}</span></span>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
 
                 <div className="bg-blue-50 border-2 border-blue-500 rounded-xl p-6">
                   <div className="flex justify-between items-center text-2xl font-bold">
