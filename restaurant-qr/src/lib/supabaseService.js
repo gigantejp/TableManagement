@@ -615,15 +615,34 @@ export const getSessionOrders = async (sessionId) => {
 }
 
 export const createOrderFromCart = async (sessionId, businessId) => {
+  console.log('createOrderFromCart called with:', { sessionId, businessId })
+
+  // Validate inputs
+  if (!sessionId) {
+    throw new Error('Session ID is required')
+  }
+
+  if (!businessId) {
+    throw new Error('Business ID is required')
+  }
+
   // Get cart items
+  console.log('Fetching cart items...')
   const cartItems = await getCartItems(sessionId)
+  console.log('Cart items:', cartItems)
 
   if (cartItems.length === 0) {
     throw new Error('El carrito está vacío')
   }
 
   // Get session info
+  console.log('Fetching session info...')
   const session = await getSession(sessionId)
+  console.log('Session:', session)
+
+  if (!session) {
+    throw new Error('Sesión no encontrada. Por favor recarga la página.')
+  }
 
   // Calculate total
   const total = cartItems.reduce((sum, item) => sum + parseFloat(item.subtotal), 0)
@@ -645,21 +664,34 @@ export const createOrderFromCart = async (sessionId, businessId) => {
 
   if (orderError) throw orderError
 
+  if (!order) {
+    throw new Error('Error al crear la orden')
+  }
+
   // Create order items from cart
-  const orderItems = cartItems.map(item => ({
-    order_id: order.id,
-    menu_item_id: item.menu_item_id,
-    name: item.name,
-    price: item.price,
-    quantity: item.quantity,
-    subtotal: item.subtotal
-  }))
+  const orderItems = cartItems.map(item => {
+    if (!item.menu_item_id) {
+      console.error('Cart item missing menu_item_id:', item)
+      throw new Error(`Item "${item.name}" no tiene menu_item_id válido`)
+    }
+    return {
+      order_id: order.id,
+      menu_item_id: item.menu_item_id,
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      subtotal: item.subtotal
+    }
+  })
 
   const { error: itemsError } = await supabase
     .from('order_items')
     .insert(orderItems)
 
-  if (itemsError) throw itemsError
+  if (itemsError) {
+    console.error('Error inserting order items:', itemsError)
+    throw itemsError
+  }
 
   // Clear cart after creating order
   await clearCart(sessionId)
