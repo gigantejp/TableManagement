@@ -220,23 +220,8 @@ function ClientView({ addNotification }) {
   };
 
   const placeOrder = async () => {
-    if (cart.length === 0) {
-      addNotification('El carrito está vacío', 'error');
-      return;
-    }
-
-    if (!currentSession) {
-      addNotification('No hay sesión activa', 'error');
-      return;
-    }
-
-    if (!business || !business.id) {
-      addNotification('Cargando información del negocio...', 'error');
-      return;
-    }
-
     try {
-      await supabaseService.createOrderFromCart(currentSession.id, business.id);
+      await supabaseService.createOrderFromCart(currentSession?.id, business?.id);
 
       setOrderConfirmed(true);
       addNotification(`Nuevo pedido de ${currentTable.name}`, 'warning', true);
@@ -252,15 +237,8 @@ function ClientView({ addNotification }) {
   };
 
   const callWaiter = async () => {
-    if (!currentTable) return;
-
-    if (!business || !business.id) {
-      addNotification('Cargando información del negocio...', 'error');
-      return;
-    }
-
     try {
-      await supabaseService.createWaiterCall(currentTable.number, currentTable.id, business.id);
+      await supabaseService.createWaiterCall(currentTable?.number, currentTable?.id, business?.id);
       addNotification(`Mesa ${currentTable.number} llamando al mesero`, 'warning');
     } catch (error) {
       console.error('Error calling waiter:', error);
