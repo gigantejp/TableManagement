@@ -230,6 +230,11 @@ function ClientView({ addNotification }) {
       return;
     }
 
+    if (!business || !business.id) {
+      addNotification('Cargando información del negocio...', 'error');
+      return;
+    }
+
     try {
       await supabaseService.createOrderFromCart(currentSession.id, business.id);
 
@@ -248,6 +253,11 @@ function ClientView({ addNotification }) {
 
   const callWaiter = async () => {
     if (!currentTable) return;
+
+    if (!business || !business.id) {
+      addNotification('Cargando información del negocio...', 'error');
+      return;
+    }
 
     try {
       await supabaseService.createWaiterCall(currentTable.number, currentTable.id, business.id);
