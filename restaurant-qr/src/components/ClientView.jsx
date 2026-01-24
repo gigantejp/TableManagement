@@ -246,7 +246,18 @@ function ClientView({ addNotification }) {
     }
   };
 
-  const requestAccount = () => {
+  const requestAccount = async () => {
+    // Refresh orders when opening account view
+    if (currentSession) {
+      try {
+        console.log('Refreshing orders for session:', currentSession.id);
+        const updatedOrders = await supabaseService.getSessionOrders(currentSession.id);
+        console.log('Loaded orders:', updatedOrders);
+        setOrders(updatedOrders);
+      } catch (error) {
+        console.error('Error refreshing orders:', error);
+      }
+    }
     setShowAccount(true);
   };
 
@@ -266,7 +277,8 @@ function ClientView({ addNotification }) {
 
   // Calculate totals
   const cartTotal = cart.reduce((sum, item) => sum + parseFloat(item.subtotal), 0);
-  const accountTotal = currentSession ? parseFloat(currentSession.total_amount || 0) : 0;
+  // Calculate account total from all orders in this session
+  const accountTotal = orders.reduce((sum, order) => sum + parseFloat(order.total || 0), 0);
   const currentOrder = orders.find(o => o.status === 'En proceso' || o.status === 'Completado');
 
   // Loading state
